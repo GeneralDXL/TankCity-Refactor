@@ -1,0 +1,137 @@
+#ifndef GAMEWINDOW_H
+#define GAMEWINDOW_H
+
+#include <QTimer>
+#include <QPainter>
+#include <QKeyEvent>
+#include <QVector>
+#include <QSet>
+#include "player.h"
+#include "enemy.h"
+#include "bullet.h"
+#include "map.h"
+#include <QSharedPointer>
+
+// 生命恢复 (HealthPack):
+//     恢复30点生命值
+//     生命值上限100
+//     客户端显示为绿色圆圈
+// 弹药增强 (AmmoBoost):
+//     减少射击冷却时间2ms
+//     最小冷却时间5ms
+//     客户端显示为金色圆圈
+//速度提升 (SpeedBoost):
+//     移动速度提升50%
+//     效果持续10秒
+//     客户端显示为蓝色圆圈
+// 无敌状态 (Invincibility):
+//     10秒内不受伤害
+//     客户端表现为坦克闪烁效果
+//     道具显示为紫色圆圈
+
+//--------------------加
+enum class ItemType {
+    HealthPack,     // 生命恢复
+    AmmoBoost,      // 弹药增强
+    SpeedBoost,     // 速度提升
+    Invincibility   // 无敌
+};
+
+struct Item {
+    int id;
+    ItemType type;
+    int x;
+    int y;
+    int duration;   // 效果持续时间(ms)
+};
+//--------------------加
+
+class Game : public QObject
+{
+    Q_OBJECT
+
+public:
+    explicit Game();
+    ~Game();
+    void setId(int id) {id = id;}
+public slots:
+    void startGame(int mapIndex, int difficulty);
+    void startEndlessGame(int mapIndex, int difficulty);
+    void startMultiGame(int mapIndex);
+    // void addBullet(Bullet* bullet); // 添加子弹到游戏
+    void handlePlayerInput(int clientId, const QJsonObject &json);
+
+    void addPlayer(int clientId);
+    void removePlayer(int clientId);
+
+    void safeStop(); // 安全停止游戏
+
+signals:
+    void broadcastData(const QByteArray &data, const int id);
+    void gameTerminated(); // 新增终止信号
+
+private slots:
+    void gameLoop();
+    void onWallDelete(const QJsonObject &json); // 处理墙删除事件
+
+private:
+    void updateGame();
+    void checkCollisions();
+    void spawnEnemy();
+    void gameOver(bool win);
+    void endlessGameOver();
+    void multiGameOver();
+    void terminateGame(); // 提取清理逻辑到单独方法
+
+    void broadcastGameState();
+    void sendInitialState(int clientId);
+
+    // 声明时统一使用 shared_ptr
+    QMap<int, std::shared_ptr<Player>> players;
+    int oneOfId;
+    QList<std::shared_ptr<Enemy>> enemies;
+    std::vector<std::shared_ptr<Bullet>> bullets;
+    QSet<std::shared_ptr<Enemy>> enemiesToRemove; // 用于存储待删除的敌人
+    
+    Map *gameMap;
+    QTimer *gameTimer;
+
+
+    int currentDifficulty;
+    int mapIndex;
+    int score;
+    int enemySpawnTimer;
+    int enemySpawnInterval;
+    int maxEnemies;
+
+    bool gameRunning;
+    bool gamePaused;
+
+    int gameModle = 0;
+    int id;
+    
+
+    int generateNum = 0;
+    int overNum = 0;
+    
+
+    //--------------------加
+    // 添加道具相关
+    QVector<Item> items;
+    int nextItemId = 1;
+    int itemSpawnTimer = 0;
+    const int ITEM_SPAWN_INTERVAL = 600; // 10秒 * 60帧/秒
+    const int MAX_ITEMS = 5;
+
+    void spawnItem();
+    void checkItemCollisions();
+    void applyItemEffect(int playerId, ItemType type);
+    void removeExpiredItems();//没有
+    //--------------------加
+
+    bool isEnd = false;
+    bool gameS = false;
+
+};
+
+#endif

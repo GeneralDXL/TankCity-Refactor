@@ -1,0 +1,41 @@
+#ifndef PLAYER_H
+#define PLAYER_H
+
+#include "tank.h"
+#include <QPainter>
+#include "bullet.h"
+#include "map.h"
+#include <QSet>
+
+class Player : public Tank
+{
+public:
+    Player(Map *gameMap); // 修改构造函数
+    void init(int x, int y);
+    void draw(QPainter &painter) override;
+    Bullet* shoot() override;
+    QRect getRect() const;
+    bool canShoot() const;
+    void setTurretAngle(float angle);
+    void updateCooldown();
+    void setBodyAngle(float angle) { bodyAngle = angle; }
+    float getBodyAngle() const { return bodyAngle; }
+
+    void setMoveForward(bool forward);
+    void setMoveBackward(bool backward);
+    void setTurnLeft(bool left);
+    void setTurnRight(bool right);
+    void setTurretTarget(const QPoint &target) { mousePos = target; }
+
+    bool isMoveForward() const;
+    bool isMoveBackward() const;
+    bool isTurnLeft() const;
+    bool isTurnRight() const;
+
+    void update();
+
+private:    
+    QSet<int> pressedKeys;
+    QPoint mousePos;  //鼠标位置
+};
+#endif
