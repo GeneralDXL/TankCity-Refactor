@@ -1,0 +1,38 @@
+---
+# 项目统一 C++ 代码风格（clang-format）
+# 使用：clang-format -i <file>   或编辑器保存时自动格式化
+Language: Cpp
+BasedOnStyle: LLVM
+
+Standard: c++17
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 100
+
+# 大括号：与现有代码风格一致（Allman）
+BreakBeforeBraces: Allman
+
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AlwaysBreakTemplateDeclarations: Yes
+
+PointerAlignment: Left
+ReferenceAlignment: Left
+AccessModifierOffset: -4
+
+# includes：分组排序
+SortIncludes: CaseSensitive
+IncludeBlocks: Regroup
+
+SpaceBeforeParens: ControlStatements
+SpacesInParentheses: false
+SpaceAfterCStyleCast: false
+
+AlignAfterOpenBracket: Align
+BinPackArguments: true
+BinPackParameters: true
+
+FixNamespaceComments: true
+MaxEmptyLinesToKeep: 1
