@@ -115,7 +115,7 @@ if(QT_VERSION_MAJOR EQUAL 6)
     qt_finalize_executable(tank)
 endif()
 
-option(CODE_COVERAGE "Enable coverage reporting" ON)
+option(CODE_COVERAGE "Enable coverage reporting" OFF)
 
 if(CODE_COVERAGE)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
