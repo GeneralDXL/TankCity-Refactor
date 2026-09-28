@@ -1,93 +1,112 @@
-# mainwork
+# TankCity · Refactor
 
+> 把一个 2025 年的学生课设坦克游戏，系统性 **重构 / 翻新 / 维护** 为「架构清晰、配置驱动、手感在线」的工程作品。
 
+**状态**：🔄 重构进行中（当前进度：**M-1 已完成**，下一步 M0）
 
-## Getting started
+---
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+## 项目背景
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+2025 年，5 名武汉大学学生完成课程作业《DevOps 初级项目实践》，用 **Qt / C++** 从零搭建了一个坦克大战游戏，包含 **TCP 客户端 / 服务端** 两部分。
 
-## Add your files
+受课程重心（Jenkins / SonarQube / Docker 流水线）影响，代码本身留下了不少技术债：
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+- 关卡地图**硬编码**在 C++ 源码里，扩展关卡 = 改代码重编译；
+- 资源没有 `.qrc`，靠 `../../assets` 相对路径加载，换个工作目录就失效；
+- **音频功能从未实现**（有素材、无代码）；
+- 构建脚本**硬编码了作者本机的 Qt 路径**，他人无法编译；
+- 无单元测试、无 CI。
+
+2026 年，由我主导对其进行**系统性重构**。
+
+---
+
+## 重构目标
+
+| 维度 | 目标 |
+|---|---|
+| 架构 | 分层：`engine` / `game` / `client` / `server` / `shared`，依赖单向 |
+| 数据 | **配置驱动** —— 关卡 / 实体 / 物块用 JSON 描述，改数据不改代码 |
+| 玩法 | **双摇杆操作** + 平滑八向移动 + 鼠标独立瞄准 |
+| 机制 | `wall` / `block` 双体系：反弹、可破坏、隐身、惯性…… |
+| 创新 | 地形即资源 / 反弹技巧 / 物块词条 |
+| 网络 | 单机 = 「本地联机」，与联机共用同一套逻辑 |
+| 工程 | 可移植构建、单元测试、GitHub Actions |
+
+### 路线图
+
+- [x] **M-1** 工程规范（Git 工作流 / clang-format / 测试记录制度）
+- [ ] **M0** 可移植构建、清理冗余、GoogleTest 骨架
+- [ ] **M1** 引擎骨架抽取（engine / game 分层）
+- [ ] **M2** 配置驱动（关卡 / 实体 / 物块 JSON 化）
+- [ ] **M3** 世界与玩法重构（tile 世界、双摇杆、A*）
+- [ ] **M4** 玩法创新落地（地形即资源 / 反弹 / 物块词条）
+- [ ] **M5** 网络统一（单机 = 本地联机）
+- [ ] **M6** 音画表现（音频、贴图、资产优化）
+- [ ] **M7** 打击感 / Juice
+- [ ] **M8** 工程收尾（测试、CI、文档、发布）
+
+---
+
+## 技术栈
+
+- **C++17**
+- **Qt 6**（Widgets / Network）—— 渲染后端设计为**可插拔**：QPainter 先行，OpenGL 预留
+- **CMake** 构建
+- **GoogleTest**（计划）
+- **GitHub Actions**（计划）
+
+## 目录结构（重构目标）
 
 ```
-cd existing_repo
-git remote add origin http://whucsgitlab.whu.edu.cn/tank-war/mainwork.git
-git branch -M main
-git push -uf origin main
+tankcity-refactor/
+├── shared/     # 客户端·服务端共享：协议、配置模型
+├── engine/     # 引擎层：core / render / physics / input / asset / net / audio
+├── game/       # 玩法层：entity / world / mode / config
+├── client/     # Qt 表现层
+├── server/     # 权威逻辑（复用 game/）
+├── assets/     # 贴图 / 音效 / 关卡配置
+├── tests/      # 单元测试
+└── docs/       # 文档
 ```
 
-## Integrate with your tools
+## 构建与运行
 
-- [ ] [Set up project integrations](http://whucsgitlab.whu.edu.cn/tank-war/mainwork/-/settings/integrations)
+> ⚠️ 重构进行中，构建方式将随 **M0** 变更。
 
-## Collaborate with your team
+当前（原始版本）：
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+```bash
+cmake -S tankCity -B build
+cmake --build build
+```
 
-## Test and Deploy
+> 原始版本硬编码了作者本机的 Qt 路径，跨机器构建会失败 —— 这将在 **M0** 修复。
 
-Use the built-in continuous integration in GitLab.
+## 操作方式
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+- **原始版本**：`W/S` 前进 / 后退，`A/D` 原地旋转
+- **目标版本**：`WASD` 平滑八向移动 + 鼠标独立瞄准 + 左键开火（双摇杆）
 
-***
+---
 
-# Editing this README
+## 项目沿革与署名
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+**2025 · 原始团队（武汉大学课程作业）**
 
-## Suggestions for a good README
+| 成员 | 负责 |
+|---|---|
+| 段绪礼 (GeneralDXL) | 后端类设计、客户端 GUI 与贴图 |
+| 张昶宇 (todayair) | 核心玩法、DevOps / CI、测试 |
+| 周梓欣 (zzxzdzx) | 敌人 AI（A\*）、关卡、双人模式、文档 |
+| 赵天星 (x1a0qiya) | TCP Socket 网络通信 |
+| 李志豪 (lzh) | 参与开发 |
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+**2026 · 重构**：段绪礼 (GeneralDXL) 主导。
 
-## Name
-Choose a self-explaining name for your project.
+---
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+## 许可证
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+待定（TBD）—— 正式公开前将与原始团队成员确认。
