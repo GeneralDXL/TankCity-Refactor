@@ -12,5 +12,8 @@ message(STATUS "可执行文件将输出到: ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
 # Qt 定位：不硬编码本机路径。
 # 请通过环境变量 CMAKE_PREFIX_PATH，或在 configure 时传入 Qt 安装前缀：
 #   cmake -S tankCity -B build -DCMAKE_PREFIX_PATH="<Qt 安装前缀>"
+enable_testing()
+
 add_subdirectory(client)
 add_subdirectory(server)
+add_subdirectory(tests)
