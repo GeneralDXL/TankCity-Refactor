@@ -1,0 +1,21 @@
+# 统一换行符策略
+# 仓库与工作区一律使用 LF，与 .editorconfig 保持一致；避免跨平台抖动。
+* text=auto eol=lf
+
+# Windows 脚本保留 CRLF（避免 cmd 解析问题）
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 二进制文件不做任何转换
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.wav  binary
+*.mp3  binary
+*.ogg  binary
+*.doc  binary
+*.docx binary
+*.pdf  binary
+*.zip  binary
