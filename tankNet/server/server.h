@@ -25,7 +25,6 @@ protected:
     void incomingConnection(qintptr socketDescriptor) override;
 
 private slots:
-    // void onNewConnection();
     void onClientDisconnected();
     void onReadyRead();
     void handleGameBroadcast(const QByteArray &data);

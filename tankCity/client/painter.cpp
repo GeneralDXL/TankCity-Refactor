@@ -61,7 +61,7 @@ PlayerPainter::PlayerPainter() : TankPainter(100, 10)
     bodyAngle = 0; // 初始车身角度
     turretAngle = 0; // 初始炮塔角度
     shootCooldown = 0; // 初始射击冷却时间
-     invincible = false;//---------------------------------------------加
+    invincible = false;
 }
 
 void PlayerPainter::draw(QPainter &painter)
@@ -84,9 +84,6 @@ void PlayerPainter::draw(QPainter &painter)
         painter.setBrush(Qt::NoBrush);
         painter.drawEllipse(position, 25, 25);
     }
-
-
-    //---------------------------------------------加
 
     painter.translate(position);
     painter.rotate(bodyAngle); // 使用车身角度旋转
@@ -125,7 +122,6 @@ void PlayerPainter::draw(QPainter &painter)
     painter.save();
     painter.translate(position);
     painter.rotate(turretAngle);
-    // painter.rotate(90); // 新增：炮塔也要整体旋转90°
 
     // 炮管 - 更细的锥形
     painter.setPen(QPen(QColor(40, 60, 110), 4)); // 更细的炮管

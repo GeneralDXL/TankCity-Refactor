@@ -3,12 +3,9 @@
 
 #include <QWidget>
 #include <QTimer>
-#include <QTcpSocket>      // 客户端套接字类
-#include <QTcpServer>      // 服务器类
-#include <QAbstractSocket> // 抽象套接字基类，提供信号和错误码
+#include <QTcpSocket>
 #include "painter.h"
 
-//--------------------加
 enum class ItemType {
     HealthPack,     // 生命恢复
     AmmoBoost,      // 弹药增强
@@ -23,7 +20,6 @@ struct Item {
     int y;
     int duration;   // 效果持续时间(ms)
 };
-//--------------------加
 
 class GameWindow : public QWidget
 {
@@ -73,13 +69,10 @@ private:
     int currentMapIndex;
     int enemySpawnTimer;
 
-    //-------------------------------------------------------加
-    // 添加道具相关
+    // 道具相关
     QList<std::shared_ptr<Item>> items;
     void drawItem(QPainter &painter, const Item &item);
     void setPlayerInvincible(int playerId, bool invincible);
-
-    //-------------------------------------------------------加
 };
 
 #endif // GAMEWINDOW_H

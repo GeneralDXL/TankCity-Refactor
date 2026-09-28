@@ -6,7 +6,6 @@
 #include <QTextStream>
 #include <QDebug>
 #include <algorithm>
-#include <QWidget>
 #include <QLabel>
 #include <QGraphicsEffect>
 

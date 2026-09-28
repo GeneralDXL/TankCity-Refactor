@@ -183,23 +183,18 @@ void Map::loadMap(int index)
         break;
     }
 
-    case 6: // （海洋）
+    case 6: // 海洋地图
     {
-        // 首先使海洋区域
+       
         int oceanWidth = 200;
         int oceanX = (MAP_WIDTH - oceanWidth) / 2;
-        //walls.append(Wall(oceanX, 10, oceanWidth, MAP_HEIGHT - 20, 4));
+       
         int gapWidth = 40;
-        // walls.append(Wall(oceanX, 150, gapWidth, 10, 4));
-        //walls.append(Wall(oceanX, 160, gapWidth, 10, 4));
+     
         int upperRightGapX = oceanX + oceanWidth - gapWidth;
-        //walls.append(Wall(upperRightGapX, 150, gapWidth, 10, 4));
-        //walls.append(Wall(upperRightGapX, 160, gapWidth, 10, 4));
-        //walls.append(Wall(oceanX, MAP_HEIGHT - 80, gapWidth, 10, 4));
-        //walls.append(Wall(oceanX, MAP_HEIGHT - 70, gapWidth, 10, 4));
+     
         int lowerRightGapX = oceanX + oceanWidth - gapWidth;
-        //walls.append(Wall(lowerRightGapX, MAP_HEIGHT - 80, gapWidth, 10, 4));
-        //walls.append(Wall(lowerRightGapX, MAP_HEIGHT - 70, gapWidth, 10, 4));
+       
         walls.append(Wall(500,120,200,640,4));
         //然后是刚墙
         walls.append(Wall(oceanX - 30, 140, 30, 40, 2));

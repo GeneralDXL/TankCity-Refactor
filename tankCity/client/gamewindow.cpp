@@ -7,7 +7,6 @@
 #include <QJsonArray>
 #include <QKeyEvent>
 #include <QtEndian>
-//加
 #include<QDateTime>
 #include <memory>
 
@@ -55,7 +54,6 @@ GameWindow::GameWindow(QWidget *parent) : QWidget(parent)
         bullets.clear();
         sendToServer(json);
         emit backToMenu();
-        // emit disconnect();
     });
 }
 
@@ -73,7 +71,7 @@ void GameWindow::paintEvent(QPaintEvent *event)
 
     if (!gameRunning) {
 
-        qDebug() << "游戏未开始"; //
+        qDebug() << "游戏未开始";
         return;
     }
 
@@ -95,7 +93,6 @@ void GameWindow::paintEvent(QPaintEvent *event)
     for (auto& bullet : bullets) {
         if (bullet) {
             bullet->draw(painter);
-            qDebug() << "success\n";
         }
     }
 
@@ -110,14 +107,12 @@ void GameWindow::paintEvent(QPaintEvent *event)
         painter.drawText(rect(), Qt::AlignCenter, "游戏暂停\n按P继续");
     }
 
-    //--------------------------加
     // 绘制道具
     for (const auto& item : items) {
         drawItem(painter, *item);
     }
-    //-------------------------加
 }
-//------------------------------------------------------------------------------加
+
 void GameWindow::drawItem(QPainter &painter, const Item &item) {
     painter.save();
 
@@ -162,7 +157,6 @@ void GameWindow::drawItem(QPainter &painter, const Item &item) {
     painter.restore();
 }
 
-// gamewindow.cpp
 void GameWindow::setPlayerInvincible(int playerId, bool invincible) {
     if (players.contains(playerId)) {
         players[playerId]->setInvincible(invincible);
@@ -174,11 +168,6 @@ void GameWindow::drawHud(QPainter &painter)
 {
     painter.setPen(Qt::white);
     painter.setFont(QFont("Arial", 12));
-
-    // for (auto player : players) {
-        // painter.drawText(10, 30, QString("玩家血量: %1").arg(player->getHealth()));
-    // }
-    // painter.drawText(10, 30, QString("玩家血量: %1").arg(players.first()->getHealth()));
 
 
     painter.drawText(width() - 150, 30, QString("分数: %1").arg(score));
@@ -225,10 +214,6 @@ void GameWindow::drawHud(QPainter &painter)
         painter.setFont(QFont("Arial", 8));
         painter.drawText(pos.x() - 25, pos.y() - 42, QString("%1").arg(enemy->getHealth()));
     }
-
-    //---------------------------------------------加
-
-    //---------------------------------------------加
 }
 
 void GameWindow::onDisconnected()
@@ -386,7 +371,6 @@ void GameWindow::onReadyRead()
             QJsonObject json;
             json["type"] = "game_over";
             sendToServer(json);
-            // emit disconnect();
         } else if (type == "multi_game_over") {
             gameTimer->stop();
             players.clear();
@@ -444,31 +428,6 @@ void GameWindow::onReadyRead()
                 newEnemy->setHealth(enemyObj["health"].toInt());
                 newEnemy->setId(enemyId);
                 enemies.push_back(std::shared_ptr<EnemyPainter>(newEnemy));
-                
-                // auto it = std::find_if(enemies.begin(), enemies.end(),
-                //                        [enemyId](const std::shared_ptr<EnemyPainter>& enemy) { return enemy->getId() == enemyId; });
-
-                // if (it != enemies.end())
-                // {
-                //     EnemyPainter *enemy = it->get();
-                //     enemy->setPosition(QPoint(enemyObj["position"].toObject()["x"].toInt(),
-                //                                enemyObj["position"].toObject()["y"].toInt()));
-                //     enemy->setBodyAngle(enemyObj["bodyAngle"].toDouble());
-                //     enemy->setTurretAngle(enemyObj["turretAngle"].toDouble());
-                //     enemy->setHealth(enemyObj["health"].toInt());
-
-                // }
-                // else
-                // {
-                //     EnemyPainter *newEnemy = new EnemyPainter(enemyObj["difficulty"].toInt());
-                //     newEnemy->setPosition(QPoint(enemyObj["position"].toObject()["x"].toInt(),
-                //                                   enemyObj["position"].toObject()["y"].toInt()));
-                //     newEnemy->setBodyAngle(enemyObj["bodyAngle"].toDouble());
-                //     newEnemy->setTurretAngle(enemyObj["turretAngle"].toDouble());
-                //     newEnemy->setHealth(enemyObj["health"].toInt());
-                //     newEnemy->setId(enemyId);
-                //     enemies.push_back(std::shared_ptr<EnemyPainter>(newEnemy));
-                // }
             }
             QJsonArray bulletArray = json["bullets"].toArray();
             bullets.clear();
@@ -495,19 +454,8 @@ void GameWindow::onReadyRead()
                 newitem->y = itemObj["y"].toInt();
                 newitem->type = static_cast<ItemType>(itemObj["item_type"].toInt());
                 items.push_back(std::shared_ptr<Item>(newitem));
-                // auto it = std::find_if(items.begin(), items.end(),
-                //                        [itemId](const std::shared_ptr<Item>& item) { return item->id == itemId; });
-                // if (it == items.end()) {
-                //     Item *newitem = new Item;
-                //     newitem->id = itemId;
-                //     newitem->x = itemObj["x"].toInt();
-                //     newitem->y = itemObj["y"].toInt();
-                //     newitem->type = static_cast<ItemType>(itemObj["type"].toInt());
-                //     items.push_back(std::shared_ptr<Item>(newitem));
-                // }
             }
         }
-        //--------------------------------------------------------------------------加
         else if (type == "player_invincible")
         {
             int playerId = json["player_id"].toInt();
@@ -537,9 +485,8 @@ void GameWindow::onReadyRead()
         else if (type == "item_picked") {
             int itemId = json["item_id"].toInt();
 
-            for (auto it = items.begin(); it != items.end(); /* 不在这里递增 */) {
+            for (auto it = items.begin(); it != items.end();) {
                 if ((*it)->id == itemId) {
-                    // erase 返回下一个有效的迭代器，直接赋值给 it
                     it = items.erase(it); 
                     break; 
                 } else {
@@ -547,7 +494,6 @@ void GameWindow::onReadyRead()
                 }
             }
         }
-        //--------------------------------------------------------------------------加
         else {
             qWarning() << "Unknown message type:" << type;
             qDebug() << json << '\n';
@@ -632,11 +578,9 @@ void GameWindow::sendKey()
     pressedKeys.remove(Qt::LeftButton); // 清除左键按下状态，避免重复发送
 
     sendToServer(input);
-    // qDebug() << "Sent key input to server\n" ;
-    // qDebug() << input << '\n';
 }
 
-// 在 gamewindow.cpp 文件中实现
+
 
 void GameWindow::connectToServer(const QString &host, quint16 port)
 {

@@ -4,11 +4,8 @@
 #include <QJsonObject>
 #include <QRandomGenerator>
 #include <QDateTime>
-//------------------加
 #include <QTimer>
 #include "server.h"
-
-// "No such method"
 
 Game::Game()
 {
@@ -252,7 +249,6 @@ void Game::gameLoop()
 
     broadcastGameState();
     
-    //------------------加
     // 道具系统
     itemSpawnTimer++;
     if (itemSpawnTimer >= ITEM_SPAWN_INTERVAL && items.size() < MAX_ITEMS) {
@@ -260,10 +256,9 @@ void Game::gameLoop()
         itemSpawnTimer = 0;
     }
     checkItemCollisions();
-    //------------------加
 }
 
-//------------------------------------------------------------------------------------------------------加
+
 void Game::spawnItem() {
     if (isEnd) return;
 
@@ -371,7 +366,7 @@ void Game::applyItemEffect(int playerId, ItemType type) {
         break;
     }
 }
-//------------------------------------------------------------------------------------------------------------------加
+
 void Game::updateGame()
 {
     if (isEnd) return;
@@ -500,19 +495,16 @@ void Game::checkCollisions()
             continue;
         }
         // 检查玩家碰撞 (敌人子弹)
-        // if (bullet->getType() == BulletType::Enemy) {
+        {
             bool hitPlayer = false;
             for (auto playerIt = players.begin(); playerIt != players.end(); ++playerIt) {
                 auto player = playerIt.value();
                 
-                //----------------------------------------------加
-                // 检查无敌状态 - 新增
+                // 检查无敌状态
                 if (player->isInvincible()) {
-                    // 无敌状态下不受伤，但子弹消失
                     qDebug() << "Player" << playerIt.key() << "is invincible, bullet ignored";
                     continue;
                 }
-                //------------------------------------------------加
 
                 if (bullet->getRect().intersects(player->getRect())) {
                     player->takeDamage(10);
@@ -525,8 +517,6 @@ void Game::checkCollisions()
                         json["type"] = "player_died";
                         json["id"] = clientId;
                         QJsonDocument doc(json);
-                        // emit broadcastData(doc.toJson(), id);
-                        // removePlayer(clientId);
                         if (players.size() > 1) {
                             removePlayer(clientId);
                         }
@@ -546,7 +536,7 @@ void Game::checkCollisions()
                 it = bullets.erase(it);
                 continue;
             }
-        // }
+        }
         
         if (!gameRunning) return;
         if (players.isEmpty()) return;
@@ -788,12 +778,6 @@ void Game::terminateGame() {
     // 确保只执行一次
     if (!gameRunning) return;
     
-    // 停止定时器并断开连接
-    // if (gameTimer) {
-    //     gameTimer->stop();
-    //     disconnect(gameTimer, nullptr, this, nullptr);
-    // }
-    
     gameRunning = false;
     
     // 安全清理顺序
@@ -801,15 +785,11 @@ void Game::terminateGame() {
     items.clear();      // 2. 清理道具
     
     // 3. 清理敌人（在玩家之前）
-    // for (auto& enemy : enemies) {
-    //     enemy->disconnect();
-    // }
     enemies.clear();
-    
+
     // 4. 清理玩家（最后，因为可能持有敌人/子弹引用）
     for (auto it = players.begin(); it != players.end();) {
         auto player = it.value();
-        // player->disconnect();
         it = players.erase(it);
     }
     
@@ -821,8 +801,6 @@ void Game::terminateGame() {
 }
 
 void Game::gameOver(bool win) {
-    // if (win) score += 500;
-    
     // 先广播结果
     QJsonObject json;
     json["type"] = "game_over";

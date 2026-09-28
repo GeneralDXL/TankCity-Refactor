@@ -11,7 +11,6 @@ void Map::loadMap(int index)
 {
     mapIndex = index;
     walls.clear();
-    // obstacles.clear();
 
     //边界
     walls.append(Wall(0, 0, 800, 20, BOUNDARY));          // Top

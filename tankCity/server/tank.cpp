@@ -9,50 +9,6 @@ Tank::Tank(Map *gameMap, int health, double speed, int shootDelay)
 
 void Tank::move(float angle, float distance, Map *map)
 {
-    /*
-    if (shootCooldown > 0) shootCooldown--;
-
-    // 获取当前地形类型
-    int terrainType = map->getTerrainType(position);
-    float actualDistance = distance;
-
-    // 根据地形调整移动速度
-    if (terrainType == FOREST) {
-        actualDistance = distance * 0.5f;
-    } else if (terrainType == ICE) {
-        actualDistance = distance * 3.0f;
-    }
-
-    // ==== 新增: 检查目标位置是否在海洋上 ====
-    float rad = qDegreesToRadians(angle);
-    QPoint moveVector(static_cast<int>(cos(rad) * actualDistance),
-                      static_cast<int>(sin(rad) * actualDistance));
-    QPoint newPos = position + moveVector;
-
-    // 检查目标位置地形
-    int targetTerrain = map->getTerrainType(newPos);
-    if (targetTerrain == SEA) {
-        return; // 目标位置是海洋，禁止移动
-    }
-    // ==== 结束新增 ====
-
-    // 创建测试矩形
-    QRect testRect(newPos.x() - 20, newPos.y() - 20, 40, 40);
-
-    // 检查碰撞（海洋会阻止移动）
-    int collisionType = map->checkTankCollision(testRect, this);
-    if (collisionType == SEA) {
-        return;
-    }
-
-    // 检查其他障碍物
-    if (map->checkCollision(testRect)) {
-        return;
-    }
-
-    position = newPos;
-    bodyAngle = angle;
-*/
     if (shootCooldown > 0) shootCooldown--;
 
     // 获取当前地形类型

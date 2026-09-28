@@ -24,9 +24,7 @@ MainWindow::MainWindow(const QString &username, QWidget *parent)
     setCentralWidget(stackedWidget);
 
     setupMainMenu();
-    qDebug() << "1\n";
     setupGameSetup();
-    qDebug() << "2\n";
 
     // Create game window (will be added when needed)
     gameWindow = new GameWindow(this);
@@ -188,9 +186,5 @@ void MainWindow::onGameFinished(int score)
 
     QMessageBox::information(this, "游戏结束", QString("游戏结束! 你的得分: %1").arg(score));
     stackedWidget->setCurrentWidget(mainMenuWidget);
-
-    // ... 保存分数 ...
-    stackedWidget->setCurrentWidget(mainMenuWidget);
-    // 确保主菜单获得焦点
     mainMenuWidget->setFocus();
 }

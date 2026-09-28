@@ -45,7 +45,6 @@ private:
     QLabel *welcomeLabel;
     QPushButton *startButton;
     QPushButton *exitButton;
-    // QPushButton *scoreboardButton;
 
     // 模式选择界面
     QWidget *modeSelectWidget;

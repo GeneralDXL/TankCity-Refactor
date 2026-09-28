@@ -6,8 +6,6 @@
 #include <QDateTime>
 #include "server.h"
 
-// "No such method"
-
 Game::Game()
 {
     gameMap = new Map();

@@ -3,9 +3,7 @@
 
 #include <QWidget>
 #include <QTimer>
-#include <QTcpSocket>      // 客户端套接字类
-#include <QTcpServer>      // 服务器类
-#include <QAbstractSocket> // 抽象套接字基类，提供信号和错误码
+#include <QTcpSocket>
 #include "painter.h"
 
 class GameWindow : public QWidget

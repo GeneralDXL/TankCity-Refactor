@@ -29,7 +29,7 @@
 //     客户端表现为坦克闪烁效果
 //     道具显示为紫色圆圈
 
-//--------------------加
+
 enum class ItemType {
     HealthPack,     // 生命恢复
     AmmoBoost,      // 弹药增强
@@ -44,8 +44,7 @@ struct Item {
     int y;
     int duration;   // 效果持续时间(ms)
 };
-//--------------------加
-
+    
 class Game : public QObject
 {
     Q_OBJECT
@@ -115,7 +114,6 @@ private:
     int overNum = 0;
     
 
-    //--------------------加
     // 添加道具相关
     QVector<Item> items;
     int nextItemId = 1;
@@ -126,8 +124,6 @@ private:
     void spawnItem();
     void checkItemCollisions();
     void applyItemEffect(int playerId, ItemType type);
-    void removeExpiredItems();//没有
-    //--------------------加
 
     bool isEnd = false;
     bool gameS = false;

@@ -26,7 +26,6 @@ signals:
 
 private:
     QVector<Wall> walls;     //边界墙
-    // QVector<Wall> obstacles;   //障碍物
     int mapIndex;
 };
 

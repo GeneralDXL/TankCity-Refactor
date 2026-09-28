@@ -115,17 +115,14 @@ void MainWindow::setupMainMenu()
     const int BUTTON_WIDTH = 300;
 
     startButton = createImageButton("./../../assets/images/ui/start.png", BUTTON_WIDTH);
-    // scoreboardButton = createImageButton("./../../assets/images/ui/row.png", BUTTON_WIDTH);
     exitButton = createImageButton("./../../assets/images/ui/exit.png", BUTTON_WIDTH);
 
 
     layout->addWidget(titleLabel,0,Qt::AlignCenter);
     layout->addWidget(startButton,0,Qt::AlignCenter);
-    // layout->addWidget(scoreboardButton,0,Qt::AlignCenter);
     layout->addWidget(exitButton,0,Qt::AlignCenter);
 
     connect(startButton, &QPushButton::clicked, this, &MainWindow::onStartGame);
-    // connect(scoreboardButton, &QPushButton::clicked, this, &MainWindow::onScoreboard);
     connect(exitButton, &QPushButton::clicked, this, &MainWindow::onExit);
 
     stackedWidget->addWidget(mainMenuWidget);

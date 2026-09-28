@@ -21,7 +21,6 @@ public:
     ~Game();
 public slots:
     void startGame(int mapIndex, int difficulty);
-    // void addBullet(Bullet* bullet); // 添加子弹到游戏
     void handlePlayerInput(int clientId, const QJsonObject &json);
 
     void addPlayer(int clientId);

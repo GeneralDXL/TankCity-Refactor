@@ -46,22 +46,22 @@ GameWindow::GameWindow(QWidget *parent) : QWidget(parent)
     });
 }
 
-void GameWindow::paintEvent(QPaintEvent *event) // 函数名拼写错误
+void GameWindow::paintEvent(QPaintEvent *event)
 {
     Q_UNUSED(event);
-    QPainter painter(this); // 创建 QPainter 的语法
+    QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
 
 
-    painter.fillRect(rect(), QColor(30, 30, 30)); //  QColor 拼写错误
+    painter.fillRect(rect(), QColor(30, 30, 30));
 
     if (!gameRunning) {
-        qDebug() << "游戏未开始"; // 变量名拼写错误
+        qDebug() << "游戏未开始";
         return;
     }
 
 
-    gameMap->draw(painter); // 变量名拼写错误
+    gameMap->draw(painter);
 
     
     for (auto player : players) {
@@ -88,7 +88,7 @@ void GameWindow::paintEvent(QPaintEvent *event) // 函数名拼写错误
 
     if (gamePaused) {
         painter.setPen(Qt::white);
-        painter.setFont(QFont("Arial", 24, QFont::Bold)); //QFont 拼写错误
+        painter.setFont(QFont("Arial", 24, QFont::Bold));
         painter.drawText(rect(), Qt::AlignCenter, "游戏暂停\n按P继续");
     }
 }
@@ -98,10 +98,8 @@ void GameWindow::drawHud(QPainter &painter)
     painter.setPen(Qt::white);
     painter.setFont(QFont("Arial", 12));
 
-    // for (auto player : players) {
-        // painter.drawText(10, 30, QString("玩家血量: %1").arg(player->getHealth()));
-    // }
-    // painter.drawText(10, 30, QString("玩家血量: %1").arg(players.first()->getHealth()));
+
+    painter.drawText(width() - 150, 30, QString("分数: %1").arg(score));
 
 
     painter.drawText(width() - 150, 30, QString("分数: %1").arg(score));
@@ -477,10 +475,9 @@ void GameWindow::sendKey() {
     pressedKeys.remove(Qt::LeftButton); // 清除左键按下状态，避免重复发送
 
     sendToServer(input);
-    // qDebug() << "Sent key input to server\n" ;
 }
 
-// 在 gamewindow.cpp 文件中实现
+
 void GameWindow::connectToServer(const QString &host, quint16 port) {
         qDebug() << "1\n";
     if (socket->state() == QTcpSocket::ConnectedState) {

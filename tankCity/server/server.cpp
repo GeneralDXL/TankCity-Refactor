@@ -81,12 +81,6 @@ void GameServer::incomingConnection(qintptr socketDescriptor)
     
     int clientId = nextClientId++;
     clients.insert(client, clientId);
-    // QJsonObject json;
-    // json["type"] = "connected";
-    // json["cilentId"] = clientId;
-    // QJsonDocument doc(json);
-    // QByteArray data = doc.toJson();
-    // sendToClient(client, data);
     clientIds.insert(clientId, client);
     client->setProperty("clientId", clientId);
     
@@ -227,11 +221,6 @@ void GameServer::processClientData(QTcpSocket *client, const QByteArray &data)
             }
         }
     }
-    // else if (type == "chat") {
-    //     // 聊天消息
-    //     QString message = json["text"].toString();
-    //     handleChatMessage(clientId, message);
-    // }
     else if (type == "out") {
         cleanupSinglePlayerGame(clientId);
         

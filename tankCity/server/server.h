@@ -5,7 +5,6 @@
 #include <QTcpSocket>
 #include <QMap>
 #include <QThread>
-#include <QDateTime>
 #include "game.h"
 
 class GameServer : public QTcpServer
