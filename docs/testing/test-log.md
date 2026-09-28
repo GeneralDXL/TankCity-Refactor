@@ -13,5 +13,6 @@
 
 | 日期 | 阶段 | 提交 | 测试项 | 预期 | 实际 | 结果 | 验证人 | 环境 / 备注 |
 |---|---|---|---|---|---|---|---|---|
-| _待填_ | M-1 | _待填_ | `clang-format` 可用 | 能格式化 `.cpp` 文件 | | | | |
-| _待填_ | M-1 | _待填_ | `.editorconfig` 生效 | 换行 LF / 缩进 4 空格 | | | | |
+| 2026-09-28 | M-1 | `531540f` | `clang-format` 可用 | 能正常输出版本号 | `clang-format version 20.1.3` | ✅ | GeneralDXL | Windows；Qt Creator 自带 |
+| 2026-09-28 | M-1 | `531540f` | 规范文件就位 | `.clang-format` / `.editorconfig` / `.gitattributes` / `docs/testing/test-log.md` 均存在 | 4 个文件全部存在 | ✅ | GeneralDXL | 终端核实 |
+| 2026-09-28 | M-1 | `531540f` | 分支与工作区 | 处于 `chore/m-1-standards` 且工作区干净 | 分支正确；`git status` 无输出 | ✅ | GeneralDXL | 终端核实 |
