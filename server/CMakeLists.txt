@@ -26,6 +26,7 @@ target_link_libraries(tankcity_server PRIVATE
     Qt6::Core
     Qt6::Network
     Qt6::Widgets
+    tankcity_shared   # 关卡/配置模型：assets/levels/*.json 的加载器
 )
 
 # Windows 特定定义（Winsock 2 / 避免 min/max 宏冲突）

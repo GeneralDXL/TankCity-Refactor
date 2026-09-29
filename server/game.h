@@ -10,6 +10,7 @@
 #include "enemy.h"
 #include "bullet.h"
 #include "map.h"
+#include "config/ConfigLoader.h"
 #include <QSharedPointer>
 
 // 生命恢复 (HealthPack):
@@ -74,6 +75,14 @@ private slots:
     void onWallDelete(const QJsonObject &json); // 处理墙删除事件
 
 private:
+    /**
+     * 装载第 index 张关卡（0 起，对应 assets/levels/level_NN.json）。
+     *
+     * 配置只加载一次并缓存；关卡文件或配置有问题时返回 false 且不留下半张地图，
+     * 调用方据此放弃开局 —— 旧代码遇到坏数据是静默地跑一张空地图。
+     */
+    bool loadLevelForIndex(int index);
+
     void updateGame();
     void checkCollisions();
     void spawnEnemy();
@@ -94,6 +103,10 @@ private:
     
     Map *gameMap;
     QTimer *gameTimer;
+
+    // 六份配置合一（game/layers/blocks/entities/items/difficulty），首次开局时加载
+    tankcity::config::Config m_config;
+    bool m_configReady = false;
 
 
     int currentDifficulty;

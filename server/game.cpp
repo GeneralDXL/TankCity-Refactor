@@ -1,4 +1,7 @@
 #include "game.h"
+#include <QCoreApplication>
+#include <QDebug>
+#include <QDir>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -6,6 +9,41 @@
 #include <QDateTime>
 #include <QTimer>
 #include "server.h"
+
+namespace {
+
+/// 资产根目录：<exe 所在目录>/../../assets（exe 在 build/bin，仓库根在两级之上）。
+/// 用 applicationDirPath 而非相对当前目录，避免服务端被从仓库根启动时找不到资产。
+QString assetsRoot()
+{
+    return QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("../../assets"));
+}
+
+} // namespace
+
+bool Game::loadLevelForIndex(int index)
+{
+    if (!m_configReady) {
+        const QString configDir = QDir(assetsRoot()).filePath(QStringLiteral("config"));
+        try {
+            m_config = tankcity::config::ConfigLoader::loadFromDirectory(configDir);
+            m_configReady = true;
+        } catch (const tankcity::config::ConfigError &e) {
+            qCritical() << "配置加载失败（" << configDir << "）：" << e.what();
+            return false;
+        }
+    }
+
+    const QString levelsDir = QDir(assetsRoot()).filePath(QStringLiteral("levels"));
+    try {
+        const tankcity::config::LevelData level =
+            tankcity::config::ConfigLoader::loadLevelByIndex(levelsDir, index, m_config);
+        return gameMap->loadLevel(level);
+    } catch (const tankcity::config::ConfigError &e) {
+        qCritical() << "关卡加载失败：" << e.what();
+        return false;
+    }
+}
 
 Game::Game()
 {
@@ -35,7 +73,10 @@ void Game::startEndlessGame(int mapIndex, int difficulty)
     this->currentDifficulty = difficulty;
     
     // 加载地图
-    gameMap->loadMap(mapIndex);
+    if (!loadLevelForIndex(this->mapIndex)) {
+        qCritical() << "关卡" << this->mapIndex << "装载失败，放弃开局";
+        return;
+    }
     
     // 设置游戏参数
     score = 0;
@@ -76,7 +117,10 @@ void Game::startEndlessGame(int mapIndex, int difficulty)
 void Game::startMultiGame(int mapIndex)
 {
     this->mapIndex = mapIndex;
-    gameMap->loadMap(mapIndex);
+    if (!loadLevelForIndex(this->mapIndex)) {
+        qCritical() << "关卡" << this->mapIndex << "装载失败，放弃开局";
+        return;
+    }
 
     score = 0;
     
@@ -103,7 +147,10 @@ void Game::startGame(int mapIndex, int difficulty)
     this->currentDifficulty = difficulty;
     
     // 加载地图
-    gameMap->loadMap(mapIndex);
+    if (!loadLevelForIndex(this->mapIndex)) {
+        qCritical() << "关卡" << this->mapIndex << "装载失败，放弃开局";
+        return;
+    }
     
     // 设置游戏参数
     score = 0;

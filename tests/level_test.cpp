@@ -2,11 +2,12 @@
  * @file  level_test.cpp
  * @brief 关卡 schema 的加载、校验与「外置前后逐项相等」的回归测试（M2）。
  *
- * 两类断言：
- *  1. 回归 —— `assets/levels/*.json` 必须与删除前的旧 `Map::loadMap()` 全量快照
+ * 三类断言：
+ *  1. 数据回归 —— `assets/levels/*.json` 必须与删除前的旧 `Map::loadMap()` 全量快照
  *     (`tests/data/legacy_levels.json`) 逐条相等。这是把关卡数据搬出 C++ 的守门人：
  *     只要有一格几何对不上，重构就失去意义。
- *  2. 反向 —— 关卡文件的各类错误（未知物块、图层写错、矩形越界……）必须被拦下。
+ *  2. 装载回归 —— 新 `Map::loadLevel()` 由 JSON 还原出的 `walls` 必须与快照同内容。
+ *  3. 反向 —— 关卡文件的各类错误（未知物块、图层写错、矩形越界……）必须被拦下。
  */
 
 #include <gtest/gtest.h>
@@ -27,6 +28,7 @@
 #include <string>
 
 #include "config/ConfigLoader.h"
+#include "map.h"
 
 namespace {
 
@@ -36,6 +38,7 @@ using tankcity::config::ConfigError;
 using tankcity::config::ConfigLoader;
 using tankcity::config::LayerDef;
 using tankcity::config::LevelData;
+using tankcity::config::LevelLayer;
 using tankcity::config::LevelRect;
 
 const QString kConfigDir = QString::fromUtf8(TANKCITY_CONFIG_DIR);
@@ -98,6 +101,32 @@ QVector<QRect> legacyBoundary(const QJsonObject &level)
 QString rectText(const QRect &r)
 {
     return QStringLiteral("[%1, %2, %3, %4]").arg(r.x()).arg(r.y()).arg(r.width()).arg(r.height());
+}
+
+/**
+ * 物块 id -> wall.h 的 int type。
+ *
+ * 这层对应关系原本由一次性导出工具的 `blockIdOf()` 建立（BRICK -> "brick" ...）。
+ * 这里独立重写一遍，而不是去调 `map.cpp` 里的桥接表 —— 两边若有一处写错，测试会当场发现。
+ */
+int legacyTypeOfBlock(const QString &id)
+{
+    if (id == QLatin1String("brick"))
+        return BRICK;
+    if (id == QLatin1String("steel"))
+        return STEEL;
+    if (id == QLatin1String("forest"))
+        return FOREST;
+    if (id == QLatin1String("sea"))
+        return SEA;
+    if (id == QLatin1String("ice"))
+        return ICE;
+    return -1;  // 旧关卡里只会出现上述五种
+}
+
+QString wallKey(int type, const QRect &r)
+{
+    return QStringLiteral("%1@%2").arg(type).arg(rectText(r));
 }
 
 /**
@@ -498,4 +527,71 @@ TEST(LevelErrors, NegativeIndexIsRejected)
 {
     expectConfigError([&] { ConfigLoader::loadLevelByIndex(kLevelsDir, -1, shipped()); },
                       QStringLiteral("index"), QStringLiteral("不能为负"));
+}
+
+// ---------------------------------------------------------------------------
+// 装载回归：Map::loadLevel() 还原出的 walls 必须与旧快照同内容
+// ---------------------------------------------------------------------------
+
+TEST(MapLoad, JsonDrivenMapReproducesLegacyWallSet)
+{
+    const QVector<QJsonObject> legacy = legacyLevels();
+    ASSERT_EQ(legacy.size(), 10);
+
+    for (int index = 0; index < legacy.size(); ++index) {
+        SCOPED_TRACE("关卡序号 " + std::to_string(index));
+
+        Map map;
+        const LevelData level = ConfigLoader::loadLevelByIndex(kLevelsDir, index, shipped());
+        ASSERT_TRUE(map.loadLevel(level));
+
+        int boundaryCount = 0;
+        QVector<QString> actualBlocks;
+        for (const Wall &w : map.getWalls()) {
+            if (w.getType() == BOUNDARY) {
+                ++boundaryCount;
+                continue;
+            }
+            actualBlocks.append(wallKey(w.getType(), w.getRect()));
+        }
+        actualBlocks.sort();
+
+        // 按集合比较：关卡文件按图层书写，旧代码里物块按 case 内 append 的顺序排列，
+        // 两者的分组方式不同（这一点由 LevelLoad 用例证明几何与类型完全一致）。
+        QVector<QString> expectedBlocks;
+        for (const auto &b : legacyBlocks(legacy.at(index)))
+            expectedBlocks.append(wallKey(legacyTypeOfBlock(b.first), b.second));
+        expectedBlocks.sort();
+
+        EXPECT_EQ(actualBlocks, expectedBlocks);
+        EXPECT_EQ(boundaryCount, 4);
+        EXPECT_EQ(map.getWalls().size(), expectedBlocks.size() + 4);
+    }
+}
+
+TEST(MapLoad, WorldSizeMismatchIsRejected)
+{
+    LevelData level;
+    level.worldWidth = 800;
+    level.worldHeight = 600;
+
+    Map map;
+    EXPECT_FALSE(map.loadLevel(level));
+    EXPECT_TRUE(map.getWalls().isEmpty());
+}
+
+TEST(MapLoad, BlockIdWithoutWallTypeLeavesEmptyMap)
+{
+    LevelData level;
+    level.worldWidth = Map::MAP_WIDTH;
+    level.worldHeight = Map::MAP_HEIGHT;
+    level.boundaryEnabled = true;
+    level.boundaryThickness = 10;
+    level.layers.append(LevelLayer{QStringLiteral("blocks"),
+                                   {LevelRect{QStringLiteral("brick"), QRect(0, 0, 40, 40)},
+                                    LevelRect{QStringLiteral("lava"), QRect(40, 0, 40, 40)}}});
+
+    Map map;
+    EXPECT_FALSE(map.loadLevel(level));
+    EXPECT_TRUE(map.getWalls().isEmpty()) << "失败时不应留下半张地图";
 }
