@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "level_08",
+  "name": "上下双洋",
+  "note": "由旧 server/map.cpp 的 Map::loadMap(7) 机械导出，未手工修改；边界由 boundary 属性生成，未出现在 rects 中。",
+  "world": { "width": 1200, "height": 900 },
+  "boundary": { "enabled": true, "thickness": 10 },
+  "layers": [
+    {
+      "layer": "ground",
+      "format": "rects",
+      "rects": [
+        { "block": "ice"     , "rect": [990, 10, 200, 730] }
+      ]
+    },
+    {
+      "layer": "blocks",
+      "format": "rects",
+      "rects": [
+        { "block": "sea"     , "rect": [210, 10, 780, 150] },
+        { "block": "sea"     , "rect": [10, 740, 1180, 150] },
+        { "block": "steel"   , "rect": [260, 210, 30, 100] },
+        { "block": "steel"   , "rect": [910, 210, 30, 100] },
+        { "block": "steel"   , "rect": [585, 310, 30, 200] },
+        { "block": "steel"   , "rect": [540, 410, 120, 30] },
+        { "block": "steel"   , "rect": [560, 670, 30, 30] },
+        { "block": "steel"   , "rect": [610, 670, 30, 30] },
+        { "block": "steel"   , "rect": [560, 700, 80, 30] }
+      ]
+    },
+    {
+      "layer": "overlay",
+      "format": "rects",
+      "rects": [
+        { "block": "forest"  , "rect": [10, 10, 200, 730] }
+      ]
+    }
+  ]
+}

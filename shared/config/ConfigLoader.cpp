@@ -864,6 +864,244 @@ void parseDifficulty(const QString &file, Config &out)
 }
 
 // ---------------------------------------------------------------------------
+// levels/*.json
+// ---------------------------------------------------------------------------
+
+QString rectText(const QRect &r)
+{
+    return QStringLiteral("[%1, %2, %3, %4]").arg(r.x()).arg(r.y()).arg(r.width()).arg(r.height());
+}
+
+/// 解析 [x, y, w, h] 形式的矩形。
+QRect requireRect(const QJsonObject &o, const QString &key,
+                  const QString &file, const QString &path)
+{
+    const QString rpath = childPath(path, key);
+    const QJsonArray arr = requireArray(o, key, file, path);
+    if (arr.size() != 4)
+        fail(file, rpath,
+             QStringLiteral("应为 [x, y, w, h] 四个整数，实际有 %1 项").arg(arr.size()));
+
+    int v[4] = {0, 0, 0, 0};
+    for (int i = 0; i < 4; ++i) {
+        if (!arr.at(i).isDouble())
+            fail(file, indexPath(rpath, i),
+                 QStringLiteral("应为整数，实际为%1").arg(jsonTypeName(arr.at(i))));
+        v[i] = arr.at(i).toInt();
+    }
+    if (v[0] < 0 || v[1] < 0)
+        fail(file, rpath, QStringLiteral("左上角坐标不能为负"));
+    if (v[2] <= 0 || v[3] <= 0)
+        fail(file, rpath, QStringLiteral("宽高必须为正整数"));
+    return QRect(v[0], v[1], v[2], v[3]);
+}
+
+/// 把 `format: "grid"` 的字符网格展开为矩形（1 格 = 1 个矩形）。
+///
+/// 不做横向合并：合并虽然能减少物块数，却会丢掉"每格"的信息，而 M3 的 tile 渲染
+/// 正需要逐格绘制。用于 M3 造关卡；M2 的旧关卡数据走 `rects`。
+QVector<LevelRect> expandGrid(const QJsonObject &o, const QString &path,
+                              const QString &file, int worldW, int worldH)
+{
+    const int cell = requireInt(o, QStringLiteral("cellSize"), file, path);
+    if (cell <= 0)
+        fail(file, childPath(path, QStringLiteral("cellSize")), QStringLiteral("必须为正整数"));
+
+    QHash<QString, QString> legend;
+    const QJsonObject legendObj = requireObject(o, QStringLiteral("legend"), file, path);
+    for (auto it = legendObj.constBegin(); it != legendObj.constEnd(); ++it) {
+        const QString keyPath = childPath(childPath(path, QStringLiteral("legend")), it.key());
+        if (it.key().size() != 1)
+            fail(file, keyPath, QStringLiteral("图例的键必须是单个字符"));
+        if (!it->isString())
+            fail(file, keyPath,
+                 QStringLiteral("图例的值应为物块 id 字符串，实际为%1").arg(jsonTypeName(*it)));
+        legend.insert(it.key(), it->toString());
+    }
+
+    const QJsonArray rows = requireArray(o, QStringLiteral("rows"), file, path);
+    if (rows.isEmpty())
+        fail(file, childPath(path, QStringLiteral("rows")), QStringLiteral("至少要有一行"));
+
+    QVector<LevelRect> rects;
+    int cols = -1;
+    for (int r = 0; r < rows.size(); ++r) {
+        const QString rpath = indexPath(childPath(path, QStringLiteral("rows")), r);
+        if (!rows.at(r).isString())
+            fail(file, rpath,
+                 QStringLiteral("应为字符串（一行字符），实际为%1").arg(jsonTypeName(rows.at(r))));
+        const QString row = rows.at(r).toString();
+        if (cols < 0) {
+            cols = row.size();
+            if (cols == 0)
+                fail(file, rpath, QStringLiteral("行不能为空"));
+        } else if (row.size() != cols) {
+            fail(file, rpath,
+                 QStringLiteral("每行长度必须一致（首行 %1 个字符，本行 %2 个）")
+                     .arg(cols).arg(row.size()));
+        }
+
+        for (int c = 0; c < row.size(); ++c) {
+            const QString blockId = legend.value(QString(row.at(c)));
+            if (blockId.isEmpty())
+                continue;  // 未出现在图例中 = 空格
+            LevelRect lr;
+            lr.block = blockId;
+            lr.rect = QRect(c * cell, r * cell, cell, cell);
+            rects.append(lr);
+        }
+    }
+
+    if (cols * cell > worldW || rows.size() * cell > worldH)
+        fail(file, path,
+             QStringLiteral("网格超出世界范围：%1x%2 格 × %3px = %4x%5，世界为 %6x%7")
+                 .arg(cols).arg(rows.size()).arg(cell)
+                 .arg(cols * cell).arg(rows.size() * cell).arg(worldW).arg(worldH));
+
+    return rects;
+}
+
+LevelData parseLevel(const QString &file, const Config &config)
+{
+    const QJsonObject root = readRootObject(file);
+    checkVersion(root, file);
+    rejectUnknownKeys(root, {QStringLiteral("version"), QStringLiteral("id"), QStringLiteral("name"),
+                             QStringLiteral("note"), QStringLiteral("world"),
+                             QStringLiteral("boundary"), QStringLiteral("layers")},
+                      file, QString());
+
+    LevelData level;
+    level.version = requireInt(root, QStringLiteral("version"), file, QString());
+    level.id = requireString(root, QStringLiteral("id"), file, QString());
+    level.name = optionalString(root, QStringLiteral("name"), level.id, file, QString());
+    level.note = optionalString(root, QStringLiteral("note"), QString(), file, QString());
+
+    const QJsonObject world = requireObject(root, QStringLiteral("world"), file, QString());
+    rejectUnknownKeys(world, {QStringLiteral("width"), QStringLiteral("height")},
+                      file, QStringLiteral("world"));
+    level.worldWidth = requireInt(world, QStringLiteral("width"), file, QStringLiteral("world"));
+    level.worldHeight = requireInt(world, QStringLiteral("height"), file, QStringLiteral("world"));
+    if (level.worldWidth <= 0 || level.worldHeight <= 0)
+        fail(file, QStringLiteral("world"), QStringLiteral("宽高必须为正整数"));
+
+    QJsonObject boundary;
+    if (optionalObject(root, QStringLiteral("boundary"), boundary, file, QString())) {
+        rejectUnknownKeys(boundary, {QStringLiteral("enabled"), QStringLiteral("thickness")},
+                          file, QStringLiteral("boundary"));
+        level.boundaryEnabled =
+            optionalBool(boundary, QStringLiteral("enabled"), true, file, QStringLiteral("boundary"));
+        level.boundaryThickness =
+            optionalInt(boundary, QStringLiteral("thickness"), config.game.boundaryThickness,
+                        file, QStringLiteral("boundary"));
+    } else {
+        level.boundaryEnabled = true;
+        level.boundaryThickness = config.game.boundaryThickness;
+    }
+
+    if (level.boundaryEnabled) {
+        const int t = level.boundaryThickness;
+        if (t <= 0)
+            fail(file, QStringLiteral("boundary.thickness"),
+                 QStringLiteral("启用边界时必须为正整数"));
+        if (level.worldWidth <= 2 * t || level.worldHeight <= 2 * t)
+            fail(file, QStringLiteral("boundary.thickness"),
+                 QStringLiteral("边界厚度 %1 过大：世界仅 %2x%3，内部区域会被完全占满")
+                     .arg(t).arg(level.worldWidth).arg(level.worldHeight));
+    }
+
+    // ---- layers ----
+    const QJsonArray sections = requireArray(root, QStringLiteral("layers"), file, QString());
+    QHash<QString, QVector<LevelRect>> byLayer;
+    QSet<QString> seenLayers;
+
+    for (int i = 0; i < sections.size(); ++i) {
+        const QString path = indexPath(QStringLiteral("layers"), i);
+        if (!sections.at(i).isObject())
+            fail(file, path,
+                 QStringLiteral("应为对象，实际为%1").arg(jsonTypeName(sections.at(i))));
+        const QJsonObject o = sections.at(i).toObject();
+
+        const QString layerId = requireString(o, QStringLiteral("layer"), file, path);
+        if (config.layer(layerId) == nullptr)
+            fail(file, childPath(path, QStringLiteral("layer")),
+                 QStringLiteral("未知图层 \"%1\"（可用：%2）")
+                     .arg(layerId, joinIds(config.layerIds())));
+        if (seenLayers.contains(layerId))
+            fail(file, childPath(path, QStringLiteral("layer")),
+                 QStringLiteral("图层 \"%1\" 在同一个关卡中只能出现一次").arg(layerId));
+        seenLayers.insert(layerId);
+
+        const QString format = optionalString(o, QStringLiteral("format"),
+                                              QStringLiteral("rects"), file, path);
+        QVector<LevelRect> rects;
+
+        if (format == QLatin1String("rects")) {
+            rejectUnknownKeys(o, {QStringLiteral("layer"), QStringLiteral("format"),
+                                  QStringLiteral("rects")},
+                              file, path);
+            const QJsonArray arr = requireArray(o, QStringLiteral("rects"), file, path);
+            for (int j = 0; j < arr.size(); ++j) {
+                const QString rpath = indexPath(childPath(path, QStringLiteral("rects")), j);
+                if (!arr.at(j).isObject())
+                    fail(file, rpath,
+                         QStringLiteral("应为对象，实际为%1").arg(jsonTypeName(arr.at(j))));
+                const QJsonObject ro = arr.at(j).toObject();
+                rejectUnknownKeys(ro, {QStringLiteral("block"), QStringLiteral("rect")}, file, rpath);
+
+                LevelRect lr;
+                lr.block = requireString(ro, QStringLiteral("block"), file, rpath);
+                lr.rect = requireRect(ro, QStringLiteral("rect"), file, rpath);
+                rects.append(lr);
+            }
+        } else if (format == QLatin1String("grid")) {
+            rejectUnknownKeys(o, {QStringLiteral("layer"), QStringLiteral("format"),
+                                  QStringLiteral("cellSize"), QStringLiteral("legend"),
+                                  QStringLiteral("rows")},
+                              file, path);
+            rects = expandGrid(o, path, file, level.worldWidth, level.worldHeight);
+        } else {
+            fail(file, childPath(path, QStringLiteral("format")),
+                 QStringLiteral("未知格式 \"%1\"（可用：rects / grid）").arg(format));
+        }
+
+        // ---- 逐块校验：物块存在、图层一致、矩形在世界内 ----
+        for (const LevelRect &lr : rects) {
+            const BlockDef *block = config.block(lr.block);
+            if (block == nullptr)
+                fail(file, path,
+                     QStringLiteral("未知物块 \"%1\"（可用：%2）")
+                         .arg(lr.block, joinIds(config.blockIds())));
+            // 物块的图层由 blocks.json 决定；关卡文件把它放到别的小节 = 两份配置对不上
+            if (block->layer != layerId)
+                fail(file, path,
+                     QStringLiteral("物块 \"%1\" 属于图层 \"%2\"，却写在图层 \"%3\" 小节中")
+                         .arg(lr.block, block->layer, layerId));
+            if (lr.rect.x() + lr.rect.width() > level.worldWidth
+                || lr.rect.y() + lr.rect.height() > level.worldHeight)
+                fail(file, path,
+                     QStringLiteral("物块 \"%1\" 的矩形 %2 超出世界范围 %3x%4")
+                         .arg(lr.block, rectText(lr.rect))
+                         .arg(level.worldWidth).arg(level.worldHeight));
+        }
+
+        byLayer[layerId] = rects;
+    }
+
+    // 统一按 layers.json 的 renderOrder 排列（文件里的书写次序不影响结果）
+    for (const LayerDef &l : config.layers) {
+        const auto it = byLayer.constFind(l.id);
+        if (it == byLayer.constEnd() || it->isEmpty())
+            continue;
+        LevelLayer layer;
+        layer.layer = l.id;
+        layer.rects = it.value();
+        level.layers.append(layer);
+    }
+
+    return level;
+}
+
+// ---------------------------------------------------------------------------
 // 交叉文件校验
 // ---------------------------------------------------------------------------
 
@@ -1050,6 +1288,28 @@ Config ConfigLoader::loadFromDirectory(const QString &directory)
                      dir.filePath(QStringLiteral("entities.json")),
                      dir.filePath(QStringLiteral("items.json")),
                      dir.filePath(QStringLiteral("difficulty.json")));
+}
+
+LevelData ConfigLoader::loadLevel(const QString &file, const Config &config)
+{
+    return parseLevel(file, config);
+}
+
+LevelData ConfigLoader::loadLevelByIndex(const QString &levelsDir, int index, const Config &config)
+{
+    if (index < 0)
+        throw ConfigError(levelsDir, QStringLiteral("index"),
+                          QStringLiteral("关卡序号不能为负：%1").arg(index));
+
+    const QDir dir(levelsDir);
+    // 关号 = index + 1：index 0 -> level_01.json（与旧 Map::loadMap(index) 的 0 起序号对应）
+    const QString name = QStringLiteral("level_%1.json").arg(index + 1, 2, 10, QLatin1Char('0'));
+    const QString file = dir.filePath(name);
+    if (!QFile::exists(file))
+        throw ConfigError(file, QString(),
+                          QStringLiteral("关卡文件不存在（序号 %1，约定文件名 level_NN.json）").arg(index));
+
+    return parseLevel(file, config);
 }
 
 } // namespace tankcity::config

@@ -7,6 +7,7 @@ add_library(tankcity_shared STATIC
     config/ConfigError.h
     config/ConfigError.cpp
     config/ConfigTypes.h
+    config/ConfigTypes.cpp
     config/ConfigLoader.h
     config/ConfigLoader.cpp
 )

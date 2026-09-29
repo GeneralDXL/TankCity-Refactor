@@ -12,6 +12,7 @@
  */
 
 #include <QJsonObject>
+#include <QRect>
 #include <QString>
 #include <QStringList>
 #include <QVector>
@@ -188,6 +189,56 @@ struct DifficultyDef {
     QJsonObject overrides;
     EnemySpawnDef spawn;
     AiDef ai;
+};
+
+// ---------------------------------------------------------------------------
+// levels/*.json
+// ---------------------------------------------------------------------------
+
+/** 关卡里的一条矩形物块。 */
+struct LevelRect {
+    QString block;  ///< blocks.json 中的物块 id
+    QRect rect;
+};
+
+/** 关卡的一个图层内容。 */
+struct LevelLayer {
+    QString layer;                 ///< layers.json 中的图层 id
+    QVector<LevelRect> rects;      ///< 保持关卡文件中的书写次序
+};
+
+/**
+ * 一个关卡。
+ *
+ * 关卡只描述「哪里放了什么」，具体行为（是否阻挡、是否可破坏、贴图）一律由
+ * blocks.json / layers.json 决定 —— 这就是"不改 C++ 即可新增关卡"的前提。
+ */
+struct LevelData {
+    int version = 0;
+    QString id;
+    QString name;
+    QString note;              ///< 自由备注（关卡文件里写明的来源等），不参与逻辑
+
+    int worldWidth = 0;
+    int worldHeight = 0;
+
+    bool boundaryEnabled = true;
+    int boundaryThickness = 0;
+
+    /** 已按 layers.json 的 renderOrder 升序排列（= 绘制顺序，越小越先绘制）。 */
+    QVector<LevelLayer> layers;
+
+    /** 按绘制顺序展平的物块列表（不含边界）。 */
+    QVector<LevelRect> allRects() const;
+
+    /**
+     * 生成边界矩形（不含边界或世界过小时返回空）：四边等厚、互不重叠的画框。
+     *
+     * 与旧 `Map::loadMap()` 的写法（左侧墙一直延伸到世界底部、底边墙从 x = t 起步）
+     * **覆盖的像素完全相同** —— 旧写法多出的 10x10 左下角块正好被底边墙覆盖。
+     * 这里只是换成了更整齐的拆分方式：4 个矩形面积之和恰为「外框 − 内框」。
+     */
+    QVector<QRect> boundaryRects() const;
 };
 
 } // namespace tankcity::config

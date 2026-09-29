@@ -64,6 +64,26 @@ public:
                             const QString &entitiesFile,
                             const QString &itemsFile,
                             const QString &difficultyFile);
+
+    /**
+     * 读取单个关卡文件。
+     *
+     * 需要传入已加载的 @p config 用于交叉校验：每个物块必须存在，且物块所属图层
+     * 必须与它所在的图层小节一致（否则就是两份配置对不上，属于典型的写错但不报错）。
+     *
+     * @throws ConfigError
+     */
+    static LevelData loadLevel(const QString &file, const Config &config);
+
+    /**
+     * 便捷重载：加载 @p levelsDir 下 0 起的第 @p index 张关卡。
+     *
+     * 文件名按「关号 = index + 1」两位零填充，即 index 0 → `level_01.json`，
+     * 与旧 `Map::loadMap(index)` 的 0 起序号一一对应。
+     *
+     * @throws ConfigError（含文件不存在）
+     */
+    static LevelData loadLevelByIndex(const QString &levelsDir, int index, const Config &config);
 };
 
 } // namespace tankcity::config

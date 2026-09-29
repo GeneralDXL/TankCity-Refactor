@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "id": "level_10",
+  "name": "环形孤岛",
+  "note": "由旧 server/map.cpp 的 Map::loadMap(9) 机械导出，未手工修改；边界由 boundary 属性生成，未出现在 rects 中。",
+  "world": { "width": 1200, "height": 900 },
+  "boundary": { "enabled": true, "thickness": 10 },
+  "layers": [
+    {
+      "layer": "ground",
+      "format": "rects",
+      "rects": [
+        { "block": "ice"     , "rect": [160, 160, 880, 80] },
+        { "block": "ice"     , "rect": [160, 660, 880, 80] },
+        { "block": "ice"     , "rect": [160, 240, 80, 420] },
+        { "block": "ice"     , "rect": [960, 240, 80, 420] },
+        { "block": "ice"     , "rect": [160, 160, 80, 80] },
+        { "block": "ice"     , "rect": [960, 160, 80, 80] },
+        { "block": "ice"     , "rect": [160, 660, 80, 80] },
+        { "block": "ice"     , "rect": [960, 660, 80, 80] }
+      ]
+    },
+    {
+      "layer": "blocks",
+      "format": "rects",
+      "rects": [
+        { "block": "sea"     , "rect": [750, 440, 20, 20] },
+        { "block": "sea"     , "rect": [728, 520, 20, 20] },
+        { "block": "sea"     , "rect": [670, 578, 20, 20] },
+        { "block": "sea"     , "rect": [590, 600, 20, 20] },
+        { "block": "sea"     , "rect": [510, 578, 20, 20] },
+        { "block": "sea"     , "rect": [451, 520, 20, 20] },
+        { "block": "sea"     , "rect": [430, 440, 20, 20] },
+        { "block": "sea"     , "rect": [451, 360, 20, 20] },
+        { "block": "sea"     , "rect": [509, 301, 20, 20] },
+        { "block": "sea"     , "rect": [590, 280, 20, 20] },
+        { "block": "sea"     , "rect": [670, 301, 20, 20] },
+        { "block": "sea"     , "rect": [728, 359, 20, 20] },
+        { "block": "sea"     , "rect": [500, 350, 200, 200] },
+        { "block": "steel"   , "rect": [150, 150, 30, 30] },
+        { "block": "steel"   , "rect": [1020, 150, 30, 30] },
+        { "block": "steel"   , "rect": [150, 720, 30, 30] },
+        { "block": "steel"   , "rect": [1020, 720, 30, 30] },
+        { "block": "steel"   , "rect": [400, 100, 30, 30] },
+        { "block": "steel"   , "rect": [770, 100, 30, 30] },
+        { "block": "steel"   , "rect": [400, 770, 30, 30] },
+        { "block": "steel"   , "rect": [770, 770, 30, 30] },
+        { "block": "steel"   , "rect": [100, 400, 30, 30] },
+        { "block": "steel"   , "rect": [1070, 400, 30, 30] },
+        { "block": "steel"   , "rect": [100, 470, 30, 30] },
+        { "block": "steel"   , "rect": [1070, 470, 30, 30] }
+      ]
+    },
+    {
+      "layer": "overlay",
+      "format": "rects",
+      "rects": [
+        { "block": "forest"  , "rect": [10, 10, 1180, 150] },
+        { "block": "forest"  , "rect": [10, 740, 1180, 150] },
+        { "block": "forest"  , "rect": [10, 160, 150, 580] },
+        { "block": "forest"  , "rect": [1040, 160, 150, 580] }
+      ]
+    }
+  ]
+}
