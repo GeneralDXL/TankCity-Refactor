@@ -318,7 +318,7 @@ TEST(LevelLoad, LayersFollowRenderOrderAndSkipEmptyOnes)
     EXPECT_EQ(level.layers.at(0).layer, QStringLiteral("blocks"));
 }
 
-TEST(LevelLoad, BoundaryUnionMatchesLegacyWithinOneTile)
+TEST(LevelLoad, BoundaryIsPixelIdenticalToLegacy)
 {
     const QVector<QJsonObject> legacy = legacyLevels();
     ASSERT_EQ(legacy.size(), 10);
@@ -342,11 +342,11 @@ TEST(LevelLoad, BoundaryUnionMatchesLegacyWithinOneTile)
             area += r.width() * r.height();
         EXPECT_EQ(area, expectedArea);
 
-        // 旧代码左侧墙多出的 10px 与底边墙重叠，所以并集应当完全一致；
-        // 留一格（10x10 = 100px）容差是为了让断言只约束"玩家能到达的区域"。
+        // 旧代码左侧墙一直延伸到世界底部、底边墙从 x = t 起步 —— 两者重叠的那块 10x10
+        // 正好让并集与「四边等厚的画框」完全相同，所以这里可以要求严格零像素差。
         const int diff =
             pixelDiff(boundary, legacyBoundary(legacy.at(index)), level.worldWidth, level.worldHeight);
-        EXPECT_LE(diff, 100) << "边界像素差异 " << diff;
+        EXPECT_EQ(diff, 0) << "边界像素差异 " << diff;
     }
 }
 
