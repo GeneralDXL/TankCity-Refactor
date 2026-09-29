@@ -45,12 +45,10 @@ else()
     if(ANDROID)
         add_library(tankll2 SHARED
             ${PROJECT_SOURCES}
-            ${NETWORK_SOURCES}
         )
     else()
         add_executable(tankll2
             ${PROJECT_SOURCES}
-            ${NETWORK_SOURCES}
         )
     endif()
 endif()
@@ -101,7 +99,7 @@ if(QT_VERSION_MAJOR EQUAL 6)
     qt_finalize_executable(tankll2)
 endif()
 
-option(CODE_COVERAGE "Enable coverage reporting" ON)
+option(CODE_COVERAGE "Enable coverage reporting" OFF)
 
 if(CODE_COVERAGE)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
