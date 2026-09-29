@@ -5,6 +5,8 @@
 #include <QColor>
 #include <QVector>
 
+#include "config/TankStats.h"
+
 class WallPainter {
 public:
     WallPainter(int x, int y, int width, int height, int type, int id);
@@ -43,7 +45,11 @@ private:
 
 class TankPainter {
 public:
-    TankPainter(int health, int shootDelay);
+    /**
+     * @param stats 该坦克的运行时数值（来自 assets/config，见 clientconfig.h）。
+     *              血量随后会被服务端下发的 JSON 覆盖，这里只是给画面一个初值。
+     */
+    explicit TankPainter(const tankcity::config::TankStats &stats);
     virtual void draw(QPainter &painter) = 0;
     int getHealth() const { return health; }
     QPoint getPosition() const { return position; }
@@ -66,7 +72,7 @@ protected:
 
 class PlayerPainter : public TankPainter {
 public:
-    PlayerPainter();
+    explicit PlayerPainter(const tankcity::config::TankStats &stats);
     void draw(QPainter &painter);
     void setInvincible(bool inv) { invincible = inv; } // -----------加
 private:
@@ -75,7 +81,8 @@ private:
 
 class EnemyPainter : public TankPainter {
 public:
-    EnemyPainter(int difficulty);
+    /// @param difficulty 仅决定配色；血量 / 射击间隔来自 @p stats。
+    EnemyPainter(int difficulty, const tankcity::config::TankStats &stats);
     void draw(QPainter &painter);
 
 private:

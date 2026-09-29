@@ -51,11 +51,12 @@ void MapPainter::draw(QPainter &painter)
 
 }
 
-TankPainter::TankPainter(int health, int shootDelay)
-    : shootDelay(shootDelay), shootCooldown(0), health(health)
+// 血量与射击间隔不再写在这里：它们来自 assets/config（见 clientconfig.cpp）。
+TankPainter::TankPainter(const tankcity::config::TankStats &stats)
+    : shootDelay(stats.shootDelayTicks), shootCooldown(0), health(stats.health)
 {}
 
-PlayerPainter::PlayerPainter() : TankPainter(100, 10) 
+PlayerPainter::PlayerPainter(const tankcity::config::TankStats &stats) : TankPainter(stats)
 {
     position = QPoint(0, 0);
     bodyAngle = 0; // 初始车身角度
@@ -141,25 +142,12 @@ void PlayerPainter::draw(QPainter &painter)
     painter.restore();
 }
 
-EnemyPainter::EnemyPainter(int difficulty)
+EnemyPainter::EnemyPainter(int difficulty, const tankcity::config::TankStats &stats)
     : difficulty(difficulty),
-        TankPainter(100, 30)
+        TankPainter(stats)
 {
-    // 根据难度设置初始参数
-    switch (difficulty) {
-    case 0: // 简单
-        shootDelay = 60; // 更长的射击延迟
-        health = 100;
-        break;
-    case 1: // 中等
-        shootDelay = 45;
-        health = 150;
-        break;
-    case 2: // 困难
-        shootDelay = 30; // 最短射击延迟
-        health = 200;
-        break;
-    }
+    // 血量 / 射击间隔的写死三档已删除：难度差异改由 difficulty.json 的 overrides 表达，
+    // 由 client::enemyStats(difficulty) 解析后从上面传进来。
 }
 
 void EnemyPainter::draw(QPainter &painter)
