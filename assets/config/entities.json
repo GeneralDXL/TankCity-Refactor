@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "bullets": {
+    "bulletBasic": {
+      "speed": 1.0,
+      "damage": 1
+    }
+  },
+  "tanks": {
+    "player": {
+      "health": 4,
+      "speed": 1.0,
+      "shootDelayTicks": 10,
+      "collisionBox": [40, 40],
+      "muzzleOffset": 25,
+      "bullet": "bulletBasic"
+    },
+    "enemyBasic": {
+      "health": 4,
+      "speed": 0.5,
+      "shootDelayTicks": 60,
+      "collisionBox": [40, 40],
+      "muzzleOffset": 25,
+      "bullet": "bulletBasic"
+    }
+  }
+}

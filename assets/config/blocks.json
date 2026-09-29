@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "blocks": {
+    "brick": {
+      "layer": "blocks",
+      "destructible": true,
+      "maxHealth": 4,
+      "requiredBulletTags": [],
+      "blocksTank": true,
+      "blocksBullet": true,
+      "blocksSight": true,
+      "damageVisual": {
+        "base": "images/textures/brick.jpg",
+        "crackOverlays": [],
+        "thresholds": [],
+        "tintDarken": 0.0
+      }
+    },
+
+    "steel": {
+      "layer": "blocks",
+      "destructible": false,
+      "blocksTank": true,
+      "blocksBullet": true,
+      "blocksSight": true,
+      "damageVisual": {
+        "base": "images/textures/steel.jpg",
+        "crackOverlays": [],
+        "thresholds": [],
+        "tintDarken": 0.0
+      }
+    },
+
+    "sea": {
+      "layer": "blocks",
+      "destructible": false,
+      "blocksTank": true,
+      "blocksBullet": true,
+      "blocksSight": false
+    },
+
+    "forest": {
+      "layer": "overlay",
+      "destructible": false,
+      "blocksTank": false,
+      "blocksBullet": false,
+      "blocksSight": false,
+      "moveSpeedFactor": 0.5,
+      "hidesTankFromEnemyAI": false
+    },
+
+    "ice": {
+      "layer": "ground",
+      "destructible": false,
+      "blocksTank": false,
+      "blocksBullet": false,
+      "blocksSight": false,
+      "moveSpeedFactor": 1.5,
+      "movement": { "model": "normal" }
+    }
+  }
+}

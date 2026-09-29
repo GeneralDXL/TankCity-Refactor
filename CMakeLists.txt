@@ -30,6 +30,7 @@ endif()
 
 include(CTest)  # 定义 BUILD_TESTING（默认 ON）并启用测试
 
+add_subdirectory(shared)  # 配置模型与加载器（被 client/server/tests 共用）
 add_subdirectory(client)
 add_subdirectory(server)
 
