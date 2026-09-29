@@ -20,3 +20,8 @@
 | 2026-09-29 | M0 | `ca10097` | 全量构建 | 客户端与服务端均编译链接成功 | 46/46 成功 | ✅ | GeneralDXL | 同上 |
 | 2026-09-29 | M0 | `ca10097` | `ctest` | 全部通过 | 1/1 通过（100%） | ✅ | GeneralDXL | 含 3 个地图网格用例 |
 | 2026-09-29 | M0 | `ca10097` | GitHub Actions | Ubuntu + Windows 均通过 | success（4m12s） | ✅ | GeneralDXL | run `36448125052` |
+| 2026-09-29 | M1.0 | `6301c22` | CMake configure | 配置成功 | 成功（5.9s） | ✅ | GeneralDXL | Windows / Qt 6.9.2 / MinGW 13.1 |
+| 2026-09-29 | M1.0 | `6301c22` | 全量构建 | 客户端与服务端均编译链接成功 | 46/46 成功 | ✅ | GeneralDXL | 同上 |
+| 2026-09-29 | M1.0 | `6301c22` | `ctest` | 全部通过 | 1/1 通过（100%） | ✅ | GeneralDXL | 同上 |
+| 2026-09-29 | M1.0 | `6301c22` | GitHub Actions | Ubuntu + Windows 均通过 | success（3m19s） | ✅ | GeneralDXL | run `36511516536` |
+| 2026-09-29 | M1.0 | `6301c22` | 运行游戏（行为不变） | 界面/贴图正常；注册、登录、选关、进入游戏均正常 | 通过 | ✅ | GeneralDXL | 服务端需带 `<IP> <port>` 启动（历史遗留，转 M1.1 处理） |

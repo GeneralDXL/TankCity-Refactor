@@ -2,7 +2,7 @@
 
 > 把一个 2025 年的学生课设坦克游戏，系统性 **重构 / 翻新 / 维护** 为「架构清晰、配置驱动、手感在线」的工程作品。
 
-**状态**：🔄 重构进行中（当前进度：**M-1 已完成**，下一步 M0）
+**状态**：🔄 重构进行中（当前进度：**M0 已完成**，正在做 **M1 引擎抽取**）
 
 ---
 
@@ -37,8 +37,10 @@
 ### 路线图
 
 - [x] **M-1** 工程规范（Git 工作流 / clang-format / 测试记录制度）
-- [ ] **M0** 可移植构建、清理冗余、GoogleTest 骨架
+- [x] **M0** 可移植构建、清理冗余、GoogleTest 骨架
 - [ ] **M1** 引擎骨架抽取（engine / game 分层）
+  - [x] **M1.0** 目录与构建结构（`client` / `server` / `tests` 提升到顶层）
+  - [ ] **M1.1** 逐个抽取 engine 子模块
 - [ ] **M2** 配置驱动（关卡 / 实体 / 物块 JSON 化）
 - [ ] **M3** 世界与玩法重构（tile 世界、双摇杆、A*）
 - [ ] **M4** 玩法创新落地（地形即资源 / 反弹 / 物块词条）
@@ -57,32 +59,32 @@
 - **GoogleTest**（计划）
 - **GitHub Actions**（计划）
 
-## 目录结构（重构目标）
+## 目录结构
 
 ```
-tankcity-refactor/
-├── shared/     # 客户端·服务端共享：协议、配置模型
-├── engine/     # 引擎层：core / render / physics / input / asset / net / audio
-├── game/       # 玩法层：entity / world / mode / config
+.
 ├── client/     # Qt 表现层
-├── server/     # 权威逻辑（复用 game/）
-├── assets/     # 贴图 / 音效 / 关卡配置
-├── tests/      # 单元测试
-└── docs/       # 文档
+├── server/     # 权威游戏逻辑
+├── tests/      # 单元测试（GoogleTest + CTest）
+├── tools/      # 开发工具（服务端监控）
+├── docs/       # 文档
+└── .github/    # CI（GitHub Actions）
 ```
+
+> `engine/`（引擎层）、`game/`（玩法层）、`shared/`（共享协议与配置模型）将在 **M1.1** 抽取时建立。
 
 ## 构建与运行
 
-> ⚠️ 重构进行中，构建方式将随 **M0** 变更。
-
-当前（原始版本）：
+需要 **CMake ≥ 3.16** 与 **Qt 6**（MinGW 或 MSVC 工具链）。
 
 ```bash
-cmake -S tankCity -B build
+cmake -S . -B build -DCMAKE_PREFIX_PATH="<你的 Qt 安装前缀>"
 cmake --build build
+ctest --test-dir build --output-on-failure   # 运行单元测试
 ```
 
-> 原始版本硬编码了作者本机的 Qt 路径，跨机器构建会失败 —— 这将在 **M0** 修复。
+- 构建产物：`build/bin/tankcity_client.exe`、`build/bin/tankcity_server.exe`
+- 首次配置会通过 FetchContent 下载 GoogleTest；离线时可用 `-DBUILD_TESTING=OFF` 跳过测试。
 
 ## 操作方式
 

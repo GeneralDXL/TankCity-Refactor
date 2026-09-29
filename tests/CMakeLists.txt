@@ -1,11 +1,7 @@
-# 单元测试目标（M0 骨架）
+# 单元测试
 # 使用 GoogleTest：优先使用系统已安装的，否则通过 FetchContent 获取。
 
-# 被测源码含 Q_OBJECT（Map），需要 moc
-set(CMAKE_AUTOMOC ON)
-
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core Widgets)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Core Widgets)
 
 find_package(GTest QUIET)
 if(NOT GTest_FOUND)
@@ -30,8 +26,8 @@ target_include_directories(tankcity_tests PRIVATE
 )
 
 target_link_libraries(tankcity_tests PRIVATE
-    Qt${QT_VERSION_MAJOR}::Core
-    Qt${QT_VERSION_MAJOR}::Widgets
+    Qt6::Core
+    Qt6::Widgets
     GTest::gtest_main
 )
 
