@@ -29,7 +29,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev
 
       - name: Configure
-        run: cmake -S tankCity -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="${{ env.QT_ROOT_DIR }}"
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="${{ env.QT_ROOT_DIR }}"
 
       - name: Build
         run: cmake --build build --config Release
