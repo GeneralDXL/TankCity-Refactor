@@ -5,7 +5,7 @@
     "healthPack": {
       "weight": 1.0,
       "effects": [
-        { "type": "heal", "amount": 1, "maxHealth": 4 }
+        { "type": "heal", "amount": 1, "maxHealth": 10 }
       ]
     },
 

@@ -8,7 +8,7 @@
   },
   "tanks": {
     "player": {
-      "health": 4,
+      "health": 10,
       "speed": 1.0,
       "shootDelayTicks": 10,
       "collisionBox": [40, 40],

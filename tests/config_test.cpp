@@ -192,12 +192,16 @@ TEST(ConfigLoad, BlocksMatchLegacyEquivalentValues)
     const auto *sea = cfg.block(QStringLiteral("sea"));
     ASSERT_NE(sea, nullptr);
     EXPECT_TRUE(sea->blocksTank);
-    EXPECT_TRUE(sea->blocksBullet);            // M2 等价值；M3 改为 false（子弹可穿过）
+    // M2 等价值：旧 checkBulletCollision() 显式跳过 SEA，子弹本来就是穿过的。
+    // （初版表把它写成 true，接线时会让海洋突然变成掩体 —— 属数据错误，已修正）
+    EXPECT_FALSE(sea->blocksBullet);
 
     const auto *forest = cfg.block(QStringLiteral("forest"));
     ASSERT_NE(forest, nullptr);
     EXPECT_EQ(forest->layer, QStringLiteral("overlay"));
-    EXPECT_DOUBLE_EQ(forest->moveSpeedFactor, 0.5);   // M2 等价值；M3 改为 0.7
+    // M2 等价值：玩家侧旧值为 ×0.5。敌人侧旧代码另有 ×0.75（enemy.cpp），
+    // 属同一地形两套数值的不一致，M2 起统一按此字段取值（有意修正）；M3 改为 0.7。
+    EXPECT_DOUBLE_EQ(forest->moveSpeedFactor, 0.5);
     EXPECT_FALSE(forest->hidesTankFromEnemyAI);       // M3 启用
 
     const auto *ice = cfg.block(QStringLiteral("ice"));
@@ -221,7 +225,9 @@ TEST(ConfigLoad, EntitiesUseTuningRelativeValues)
 
     const auto *player = cfg.tank(QStringLiteral("player"));
     ASSERT_NE(player, nullptr);
-    EXPECT_EQ(player->health, 4);
+    // 旧 100 血 ÷ 旧 10 伤害（敌人子弹打玩家）= 10 下。注意这与敌人那侧的
+    // 100 ÷ 25 = 4 下不是同一个数 —— 玩家挨打次数必须按 10 换算才等价。
+    EXPECT_EQ(player->health, 10);
     EXPECT_DOUBLE_EQ(player->speed, 1.0);
     EXPECT_EQ(player->shootDelayTicks, 10);
     EXPECT_EQ(player->collisionBoxW, 40);

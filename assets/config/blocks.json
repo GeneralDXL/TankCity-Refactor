@@ -35,7 +35,7 @@
       "layer": "blocks",
       "destructible": false,
       "blocksTank": true,
-      "blocksBullet": true,
+      "blocksBullet": false,
       "blocksSight": false
     },
 
