@@ -569,6 +569,147 @@ TEST(MapLoad, JsonDrivenMapReproducesLegacyWallSet)
     }
 }
 
+// ---------------------------------------------------------------------------
+// 顺序等价：外置后 walls 的排列顺序变了，但「首个命中」类算法必须看不到差别
+// ---------------------------------------------------------------------------
+
+namespace {
+
+/// `Map::checkTankCollision` 会跳过的地形（坦克能穿过）。
+bool tankSees(int type)
+{
+    return type != FOREST && type != ICE;
+}
+
+/// `Map::checkBulletCollision` 会跳过的地形（子弹能穿过）。
+bool bulletSees(int type)
+{
+    return type != FOREST && type != SEA && type != ICE;
+}
+
+struct TypedRect
+{
+    int type;
+    QRect rect;
+};
+
+/// 旧快照的墙体，**保留数组顺序**——它就是旧 `Map::loadMap()` 的 append 顺序。
+QVector<TypedRect> legacyWallsOf(const QJsonObject &level)
+{
+    QVector<TypedRect> result;
+    for (const QJsonValue &v : level.value(QStringLiteral("walls")).toArray()) {
+        const QJsonObject w = v.toObject();
+        const QString type = w.value(QStringLiteral("type")).toString();
+        const QJsonArray r = w.value(QStringLiteral("rect")).toArray();
+        result.append(TypedRect{
+            type == QLatin1String("boundary") ? BOUNDARY : legacyTypeOfBlock(type),
+            QRect(r.at(0).toInt(), r.at(1).toInt(), r.at(2).toInt(), r.at(3).toInt())});
+    }
+    return result;
+}
+
+} // namespace
+
+/**
+ * 旧代码按 case 内 append 的顺序、新代码按图层分组，两者的 walls 顺序不同。
+ *
+ * `checkBulletCollision` / `checkTankCollision` 都是「首个命中即返回」，顺序一变就可能
+ * 改变行为（打中哪块砖、踩在哪层地形上）。本用例不去复刻这两个函数，而是直接守住使它们
+ * 无法观察差异的结构性前提：
+ *
+ *   **凡是「重叠」且「两个类型都会被该函数看见」的墙对，相对先后必须在两种顺序下一致。**
+ *
+ * 为什么这条前提就够：设 u 是旧序里第一个与探针矩形相交的墙。若新序里存在一个更早的
+ * 相交墙 v，则 v 在旧序里必然晚于 u（否则旧序的首个命中就不是 u），即 u、v 这一对
+ * 既互相重叠（都与探针相交）、类型又都被看见，却在换序后颠倒了 —— 这正是上面禁止的情况。
+ * 故新序的首个命中仍是 u。
+ *
+ * 反过来若不成立，就必须回去对齐装载顺序，而不是放宽这条断言。
+ */
+TEST(MapOrder, ReorderingIsInvisibleToFirstHitLogic)
+{
+    const QVector<QJsonObject> legacy = legacyLevels();
+    ASSERT_EQ(legacy.size(), 10);
+
+    for (int index = 0; index < legacy.size(); ++index) {
+        SCOPED_TRACE("关卡序号 " + std::to_string(index));
+
+        const LevelData level = ConfigLoader::loadLevelByIndex(kLevelsDir, index, shipped());
+
+        const QVector<TypedRect> oldWalls = legacyWallsOf(legacy.at(index));
+        QVector<TypedRect> newWalls;
+        for (const QRect &r : level.boundaryRects())
+            newWalls.append(TypedRect{BOUNDARY, r});
+        for (const LevelRect &lr : level.allRects())
+            newWalls.append(TypedRect{legacyTypeOfBlock(lr.block), lr.rect});
+
+        ASSERT_EQ(oldWalls.size(), newWalls.size());
+
+        // 1) 边界在两种顺序里都排在所有物块之前（旧代码先 append 四条边界，新代码同理）。
+        //    边界的矩形拆分方式变了（像素相同），所以只比"位置",不比矩形。
+        const auto firstBlockIndex = [](const QVector<TypedRect> &v) {
+            for (int i = 0; i < v.size(); ++i)
+                if (v.at(i).type != BOUNDARY)
+                    return i;
+            return static_cast<int>(v.size());
+        };
+        const auto lastBoundaryIndex = [](const QVector<TypedRect> &v) {
+            int last = -1;
+            for (int i = 0; i < v.size(); ++i)
+                if (v.at(i).type == BOUNDARY)
+                    last = i;
+            return last;
+        };
+        EXPECT_LT(lastBoundaryIndex(oldWalls), firstBlockIndex(oldWalls));
+        EXPECT_LT(lastBoundaryIndex(newWalls), firstBlockIndex(newWalls));
+
+        // 2) 物块按 (类型, 矩形) 一一配对，得到"旧序下标 -> 新序下标"。
+        QVector<int> newIndexOf(oldWalls.size(), -1);
+        QVector<bool> matched(newWalls.size(), false);
+        for (int i = 0; i < oldWalls.size(); ++i) {
+            if (oldWalls.at(i).type == BOUNDARY)
+                continue;
+            for (int j = 0; j < newWalls.size(); ++j) {
+                if (matched.at(j) || newWalls.at(j).type == BOUNDARY)
+                    continue;
+                if (newWalls.at(j).type == oldWalls.at(i).type
+                    && newWalls.at(j).rect == oldWalls.at(i).rect) {
+                    matched[j] = true;
+                    newIndexOf[i] = j;
+                    break;
+                }
+            }
+            ASSERT_GE(newIndexOf.at(i), 0) << "新顺序里找不到与旧序第 " << i << " 项对应的物块";
+        }
+
+        // 3) 对每个碰撞函数各查一遍：重叠且都会被看见的墙对，相对顺序必须保持。
+        for (int pass = 0; pass < 2; ++pass) {
+            const bool forBullet = (pass == 1);
+            for (int i = 0; i < oldWalls.size(); ++i) {
+                const TypedRect &a = oldWalls.at(i);
+                if (newIndexOf.at(i) < 0)  // 边界：拆分方式不同，不参与配对
+                    continue;
+                if (!(forBullet ? bulletSees(a.type) : tankSees(a.type)))
+                    continue;
+
+                for (int j = i + 1; j < oldWalls.size(); ++j) {
+                    const TypedRect &b = oldWalls.at(j);
+                    if (newIndexOf.at(j) < 0)
+                        continue;
+                    if (!(forBullet ? bulletSees(b.type) : tankSees(b.type)))
+                        continue;
+                    if (!a.rect.intersects(b.rect))
+                        continue;
+
+                    EXPECT_LT(newIndexOf.at(i), newIndexOf.at(j))
+                        << (forBullet ? "子弹" : "坦克") << "：旧序第 " << i << "、" << j
+                        << " 项重叠且旧序在前，新序却颠倒了 —— 首个命中会改变";
+                }
+            }
+        }
+    }
+}
+
 TEST(MapLoad, WorldSizeMismatchIsRejected)
 {
     LevelData level;
