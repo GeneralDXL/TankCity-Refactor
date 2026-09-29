@@ -10,7 +10,7 @@
 class Player : public Tank
 {
 public:
-    Player(Map *gameMap); // 修改构造函数
+    Player(Map *gameMap, const tankcity::config::TankStats &stats); // 修改构造函数
     void init(int x, int y);
     Bullet* shoot() override;
     QRect getRect() const;
@@ -40,6 +40,7 @@ public:
     void setInvincible(bool inv) { invincible = inv; }
     bool isInvincible() const { return invincible; }
     int getShootDelay(){return shootDelay;}
+    int getMaxHealth() const { return maxHealth; } // 满血值（配置），治疗/血条要用
     // //-------------------------------------------------加
 
 private:    
@@ -47,5 +48,6 @@ private:
     QPoint mousePos;  //鼠标位置
     //-------------------------------------------------加
     bool invincible = false;
+    int maxHealth = 0;  // 配置里的满血值，reset 与治疗上限都用它
 };
 #endif

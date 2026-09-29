@@ -84,6 +84,18 @@ public:
      * @throws ConfigError（含文件不存在）
      */
     static LevelData loadLevelByIndex(const QString &levelsDir, int index, const Config &config);
+
+    /**
+     * 列出 @p levelsDir 下所有 `level_NN.json`，按序号升序返回。
+     *
+     * 只读每个文件的顶层 `id` / `name`，**不做**完整校验（不查物块引用、不查几何），
+     * 也不需要 @p Config —— 供 UI 关卡列表使用。真正能不能开局由 loadLevelByIndex()
+     * 在开局时判定，所以这里刻意对坏文件宽容：读不出来的关卡跳过并 qWarning，
+     * 避免一个写坏的关卡文件把整个菜单弄崩。
+     *
+     * 这是「新增关卡不改 C++」的关键：把新文件放进目录，列表里就会多一项。
+     */
+    static QVector<LevelEntry> listLevels(const QString &levelsDir);
 };
 
 } // namespace tankcity::config

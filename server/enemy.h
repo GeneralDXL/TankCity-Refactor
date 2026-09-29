@@ -12,7 +12,9 @@ class GameWindow;
 class Enemy : public Tank
 {
 public:
-    Enemy(Map *gameMap, const QPoint &position, int difficulty);
+    /// 数值由 difficulty.json 的档位解析而来（见 tankcity::config::resolveEnemyStats）。
+    Enemy(Map *gameMap, const QPoint &position, int difficulty,
+          const tankcity::config::TankStats &stats);
     void update(const QPoint &playerPos, Map *map);
     Bullet* shoot() override;
     QRect getRect() const;

@@ -41,7 +41,8 @@ int wallTypeOfBlock(const QString &blockId)
 
 Map::Map() = default;
 
-bool Map::loadLevel(const tankcity::config::LevelData &level)
+bool Map::loadLevel(const tankcity::config::LevelData &level,
+                    const tankcity::config::Config &config)
 {
     walls.clear();
 
@@ -56,16 +57,24 @@ bool Map::loadLevel(const tankcity::config::LevelData &level)
 
     // 边界墙：旧代码里手写的四条，现在由关卡属性生成
     for (const QRect &r : level.boundaryRects())
-        walls.append(Wall(r.x(), r.y(), r.width(), r.height(), BOUNDARY));
+        walls.append(Wall::makeBoundary(r.x(), r.y(), r.width(), r.height()));
 
     for (const tankcity::config::LevelRect &lr : level.allRects()) {
+        // 先问引擎能不能表达（贴图与 map_init 协议用的都是 int type），再取配置里的行为。
+        // 顺序不可颠倒：level_test 的合成关卡正是靠这一条拒绝「引擎无法表达」的物块 id。
         const int type = wallTypeOfBlock(lr.block);
         if (type < 0) {
             qCritical() << "关卡" << level.id << "使用了 Wall 无法表达的物块 id：" << lr.block;
             walls.clear();
             return false;
         }
-        walls.append(Wall(lr.rect.x(), lr.rect.y(), lr.rect.width(), lr.rect.height(), type));
+        const tankcity::config::BlockDef *def = config.block(lr.block);
+        if (def == nullptr) {
+            qCritical() << "关卡" << level.id << "引用了 blocks.json 中不存在的物块：" << lr.block;
+            walls.clear();
+            return false;
+        }
+        walls.append(Wall(lr.rect.x(), lr.rect.y(), lr.rect.width(), lr.rect.height(), type, *def));
     }
 
     return true;
@@ -74,13 +83,13 @@ bool Map::loadLevel(const tankcity::config::LevelData &level)
 bool Map::checkCollision(const QRect &rect) const
 {
     for (const Wall &wall : walls) {
-        if (wall.getType() == BRICK && wall.getHealth() <= 0) {
+        // 是否挡坦克由 blocks.json 的 blocksTank 决定（森林、冰块为 false）
+        if (!wall.isBlockingTank()) {
             continue;
         }
 
-        // 只跳过森林和冰块（坦克可以穿过）
-        // 海洋不再跳过 -> 坦克不能穿过海洋
-        if (wall.getType() == FOREST || wall.getType() == ICE) {
+        // 已经被打掉的砖墙不再阻挡
+        if (wall.isDestructible() && wall.getHealth() <= 0) {
             continue;
         }
 
@@ -91,19 +100,18 @@ bool Map::checkCollision(const QRect &rect) const
     return false;
 }
 
-bool Map::checkBulletCollision(const QRect &rect)
+bool Map::checkBulletCollision(const QRect &rect, int damage)
 {
     for (Wall &wall : walls) {
-        // 跳过森林、海洋和冰块（子弹可以穿过）
-        if (wall.getType() == FOREST ||
-            wall.getType() == SEA || // 添加海洋跳过
-            wall.getType() == ICE) {
+        // 是否挡子弹由 blocks.json 的 blocksBullet 决定
+        // （旧代码跳过森林/海洋/冰块，正是这三者为 false；边界与砖钢为 true）
+        if (!wall.isBlockingBullet()) {
             continue;
         }
 
         if (rect.intersects(wall.getRect())) {
             if(wall.isDestructible()){
-                wall.setHealth(wall.getHealth() - 25);
+                wall.setHealth(wall.getHealth() - damage);
             }
             if(wall.isDestructible() && wall.getHealth() <= 0)
             {
@@ -122,17 +130,12 @@ bool Map::checkBulletCollision(const QRect &rect)
 int Map::checkTankCollision(const QRect &rect, const Tank *tank) const
 {
     for (const Wall &wall : walls) {
-        // 跳过森林和冰块（坦克可以穿过）
-        if (wall.getType() == FOREST || wall.getType() == ICE) {
+        // 是否挡坦克由 blocks.json 的 blocksTank 决定（森林、冰块为 false）。
+        // 旧代码把海洋单列一支，返回的也是 SEA，与这里返回 getType() 等价。
+        if (!wall.isBlockingTank()) {
             continue;
         }
 
-        // 海洋阻挡坦克
-        if (rect.intersects(wall.getRect()) && wall.getType() == SEA) {
-            return SEA; // 返回海洋类型
-        }
-
-        // 其他障碍物阻挡坦克
         if (rect.intersects(wall.getRect())) {
             return wall.getType(); // 返回墙的类型
         }
@@ -156,18 +159,13 @@ bool Map::isCellWalkable(int gridX, int gridY) const {
 
 
     for (const Wall &wall : walls) {
-        // 跳过森林和冰块（坦克可以穿过）
-        if (wall.getType() == FOREST || wall.getType() == ICE) {
+        // 只由 blocksTank 决定：森林、冰块可穿过，海洋/边界/砖/钢不可（与旧写法一致）
+        if (!wall.isBlockingTank()) {
             continue;
         }
 
-        // 检查海洋、边界、砖墙和钢墙
         if (wall.getRect().intersects(cellRect)) {
-            // 海洋和不可穿越的墙
-            if (wall.getType() == SEA || wall.getType() == BOUNDARY ||
-                wall.getType() == BRICK || wall.getType() == STEEL) {
-                return false;
-            }
+            return false;
         }
     }
     return true;
@@ -216,4 +214,15 @@ int Map::getTerrainType(const QPoint &position) const
         }
     }
     return -1; // 默认地形
+}
+
+double Map::getMoveSpeedFactor(const QPoint &position) const
+{
+    for (const Wall &wall : walls) {
+        if (wall.contains(position)) {
+            const double factor = wall.getMoveSpeedFactor();
+            return factor > 0.0 ? factor : 1.0; // 0 表示该物块不影响移动
+        }
+    }
+    return 1.0;
 }

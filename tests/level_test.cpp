@@ -38,6 +38,7 @@ using tankcity::config::ConfigError;
 using tankcity::config::ConfigLoader;
 using tankcity::config::LayerDef;
 using tankcity::config::LevelData;
+using tankcity::config::LevelEntry;
 using tankcity::config::LevelLayer;
 using tankcity::config::LevelRect;
 
@@ -543,7 +544,7 @@ TEST(MapLoad, JsonDrivenMapReproducesLegacyWallSet)
 
         Map map;
         const LevelData level = ConfigLoader::loadLevelByIndex(kLevelsDir, index, shipped());
-        ASSERT_TRUE(map.loadLevel(level));
+        ASSERT_TRUE(map.loadLevel(level, shipped()));
 
         int boundaryCount = 0;
         QVector<QString> actualBlocks;
@@ -717,7 +718,7 @@ TEST(MapLoad, WorldSizeMismatchIsRejected)
     level.worldHeight = 600;
 
     Map map;
-    EXPECT_FALSE(map.loadLevel(level));
+    EXPECT_FALSE(map.loadLevel(level, shipped()));
     EXPECT_TRUE(map.getWalls().isEmpty());
 }
 
@@ -733,6 +734,126 @@ TEST(MapLoad, BlockIdWithoutWallTypeLeavesEmptyMap)
                                     LevelRect{QStringLiteral("lava"), QRect(40, 0, 40, 40)}}});
 
     Map map;
-    EXPECT_FALSE(map.loadLevel(level));
+    EXPECT_FALSE(map.loadLevel(level, shipped()));
     EXPECT_TRUE(map.getWalls().isEmpty()) << "失败时不应留下半张地图";
+}
+
+// ---------------------------------------------------------------------------
+// 关卡列表：菜单的数据来源（DoD 5）
+//
+// 旧客户端把 10 项写死在 mainwindow.cpp 里，所以「新增 level_11.json」只做对了一半
+// —— 服务端按序号拼文件名已经通用，菜单里却不会多出第 11 项。
+// 这组测试是那半个缺口的守门人。
+// ---------------------------------------------------------------------------
+
+namespace {
+
+/// 把仓库里的关卡复制进临时目录，供列表测试增删文件。
+class TempLevelsDir
+{
+public:
+    TempLevelsDir()
+        : m_dir(std::make_unique<QTemporaryDir>())
+    {
+        const QDir src(kLevelsDir);
+        const QStringList names =
+            src.entryList({QStringLiteral("level_*.json")}, QDir::Files, QDir::Name);
+        for (const QString &name : names)
+            writeFile(name, readBytes(src.filePath(name)));
+    }
+
+    void writeFile(const QString &name, const QByteArray &data) const
+    {
+        QFile f(m_dir->filePath(name));
+        ASSERT_TRUE(f.open(QIODevice::WriteOnly | QIODevice::Truncate)) << name.toStdString();
+        f.write(data);
+    }
+
+    QString dir() const { return m_dir->path(); }
+
+private:
+    std::unique_ptr<QTemporaryDir> m_dir;
+};
+
+/// 一张最小合法关卡，id / name 可按需替换。
+QByteArray minimalLevel(const QString &id, const QString &name = QString())
+{
+    const QString nameLine = name.isEmpty()
+                                 ? QString()
+                                 : QStringLiteral("\n  \"name\": \"%1\",").arg(name);
+    return QStringLiteral(R"({
+  "version": 1,%1
+  "id": "%2",
+  "world": { "width": 1200, "height": 900 },
+  "boundary": { "enabled": true, "thickness": 10 },
+  "layers": [ { "layer": "blocks", "format": "rects",
+                "rects": [ { "block": "brick", "rect": [40, 40, 40, 40] } ] } ]
+})")
+        .arg(nameLine, id)
+        .toUtf8();
+}
+
+} // namespace
+
+TEST(LevelList, ShippedLevelsAreListedInOrder)
+{
+    const QVector<LevelEntry> levels = ConfigLoader::listLevels(kLevelsDir);
+
+    ASSERT_EQ(levels.size(), 10) << "assets/levels 下应有 10 张关卡（index.json 不算关卡）";
+    for (int i = 0; i < levels.size(); ++i) {
+        EXPECT_EQ(levels.at(i).index, i) << "第 " << i << " 项的序号必须与其位置一致";
+        EXPECT_EQ(levels.at(i).id, QStringLiteral("level_%1").arg(i + 1, 2, 10, QLatin1Char('0')));
+        EXPECT_FALSE(levels.at(i).name.isEmpty()) << "第 " << i << " 项没有显示名";
+    }
+}
+
+/// DoD 5：新增关卡文件即出现在列表里，且序号可直接交给服务端。
+TEST(LevelList, NewLevelFileAppearsWithoutCppChange)
+{
+    TempLevelsDir tmp;
+    tmp.writeFile(QStringLiteral("level_11.json"),
+                  minimalLevel(QStringLiteral("level_11"), QStringLiteral("新增测试关")));
+
+    const QVector<LevelEntry> levels = ConfigLoader::listLevels(tmp.dir());
+
+    ASSERT_EQ(levels.size(), 11) << "多放一个 level_11.json，列表就该多一项";
+    EXPECT_EQ(levels.last().index, 10) << "序号 10 对应 level_11.json";
+    EXPECT_EQ(levels.last().id, QStringLiteral("level_11"));
+    EXPECT_EQ(levels.last().name, QStringLiteral("新增测试关"));
+
+    // 序号是 UI ↔ 服务端的契约：服务端拿 10 去拼 level_11.json 必须拼得到。
+    const LevelData loaded = ConfigLoader::loadLevelByIndex(tmp.dir(), 10, shipped());
+    EXPECT_EQ(loaded.id, QStringLiteral("level_11"));
+}
+
+TEST(LevelList, NameFallsBackToIdWhenMissing)
+{
+    TempLevelsDir tmp;
+    tmp.writeFile(QStringLiteral("level_11.json"), minimalLevel(QStringLiteral("level_11")));
+
+    const QVector<LevelEntry> levels = ConfigLoader::listLevels(tmp.dir());
+
+    ASSERT_EQ(levels.size(), 11);
+    EXPECT_EQ(levels.last().name, QStringLiteral("level_11")) << "没写 name 时退回 id";
+}
+
+TEST(LevelList, BrokenFileIsSkippedInsteadOfFailing)
+{
+    TempLevelsDir tmp;
+    tmp.writeFile(QStringLiteral("level_11.json"), QByteArray("{ 这不是 JSON"));
+
+    // 列表是菜单的入口：一张关卡写坏不该把整个菜单拖死（可玩性由开局时的加载兜底）。
+    EXPECT_EQ(ConfigLoader::listLevels(tmp.dir()).size(), 10);
+}
+
+TEST(LevelList, OnlyLevelFilesAreListed)
+{
+    TempLevelsDir tmp;
+    tmp.writeFile(QStringLiteral("level_10_backup.json"), QByteArray("{}"));
+    tmp.writeFile(QStringLiteral("readme.txt"), QByteArray("hi"));
+
+    EXPECT_EQ(ConfigLoader::listLevels(tmp.dir()).size(), 10)
+        << "只认 level_NN.json：备份与说明文件不该出现在菜单里";
+    EXPECT_TRUE(ConfigLoader::listLevels(QStringLiteral("no/such/levels/dir")).isEmpty())
+        << "目录不存在时返回空列表，不抛异常";
 }

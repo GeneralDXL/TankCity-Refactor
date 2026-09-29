@@ -10,6 +10,8 @@ add_library(tankcity_shared STATIC
     config/ConfigTypes.cpp
     config/ConfigLoader.h
     config/ConfigLoader.cpp
+    config/TankStats.h
+    config/TankStats.cpp
 )
 
 target_include_directories(tankcity_shared PUBLIC

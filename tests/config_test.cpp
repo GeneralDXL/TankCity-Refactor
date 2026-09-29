@@ -20,6 +20,7 @@
 #include <memory>
 
 #include "config/ConfigLoader.h"
+#include "config/TankStats.h"
 
 namespace {
 
@@ -29,6 +30,9 @@ using tankcity::config::ConfigLoader;
 using tankcity::config::EffectDef;
 using tankcity::config::ItemDef;
 using tankcity::config::MovementModel;
+using tankcity::config::resolveEnemyStats;
+using tankcity::config::resolveTankStats;
+using tankcity::config::TankStats;
 
 const QString kConfigDir = QString::fromUtf8(TANKCITY_CONFIG_DIR);
 
@@ -254,7 +258,9 @@ TEST(ConfigLoad, ItemsKeepDesignDecisionToDropInvincibility)
     ASSERT_NE(health, nullptr);
     ASSERT_EQ(health->effects.size(), 1);
     EXPECT_EQ(health->effects.at(0).type, QStringLiteral("heal"));
-    EXPECT_EQ(health->effects.at(0).params.value(QStringLiteral("amount")).toInt(), 1);
+    // 旧代码是「+30，上限 100」，即补满 30% 血。玩家满血由 100 改为 10 之后，
+    // 同比例值就是 3（见 game.cpp 的 kHealthPackHeal，两处取值必须一致）。
+    EXPECT_EQ(health->effects.at(0).params.value(QStringLiteral("amount")).toInt(), 3);
 }
 
 TEST(ConfigLoad, DifficultiesReferenceTankPrototype)
@@ -376,8 +382,8 @@ TEST(ConfigErrors, UnknownEffectParameterIsRejected)
 {
     TempConfig tmp;
     tmp.patch(QStringLiteral("items.json"),
-              QStringLiteral("\"type\": \"heal\", \"amount\": 1"),
-              QStringLiteral("\"type\": \"heal\", \"amout\": 1"));
+              QStringLiteral("\"type\": \"heal\", \"amount\": 3"),
+              QStringLiteral("\"type\": \"heal\", \"amout\": 3"));
     expectConfigError([&tmp] { tmp.load(); },
                       QStringLiteral("items.healthPack.effects[0].amout"),
                       QStringLiteral("未知字段"));
@@ -427,4 +433,130 @@ TEST(ConfigInheritance, BlockFallsBackToLayerDefaults)
     ASSERT_NE(forest, nullptr);
     EXPECT_TRUE(forest->blocksSight);      // 继承自 overlay
     EXPECT_FALSE(forest->blocksTank);      // 同样继承自 overlay
+}
+
+// ---------------------------------------------------------------------------
+// 数值解析：把「M2 零行为变化」的等价值钉死。
+//
+// 这一组是 DoD 2「数值只在 JSON 里定义」的可执行凭据 —— JSON 允许改，但一旦改出
+// 与旧代码不等价的值（例如玩家满血变回 4、子弹伤害变成 25），这里立刻变红。
+// 旧值来源见 docs/plans/M2-配置Schema草案.md 的 §8 D0 表。
+// ---------------------------------------------------------------------------
+
+TEST(ConfigResolve, PlayerStatsMatchLegacyRuntimeValues)
+{
+    const Config cfg = ConfigLoader::loadFromDirectory(kConfigDir);
+    const TankStats stats = resolveTankStats(cfg, QStringLiteral("player"));
+
+    // 旧：health = 100，挨的是敌人子弹 10 伤 -> 10 下
+    EXPECT_EQ(stats.health, 10);
+    EXPECT_EQ(stats.hitsToDestroy(), 10);
+    // 旧：Player 构造参数 5.0f（= speed 1.0 × baseMoveSpeed 5.0）
+    EXPECT_DOUBLE_EQ(stats.moveSpeed, 5.0);
+    // 旧：shootDelay = 10
+    EXPECT_EQ(stats.shootDelayTicks, 10);
+    // 旧：Bullet::speed = 8（= speed 1.0 × baseBulletSpeed 8.0）
+    EXPECT_DOUBLE_EQ(stats.bulletSpeed, 8.0);
+    // 旧：打敌人 25、打砖墙 25 -> 统一成每发 1 伤
+    EXPECT_EQ(stats.bulletDamage, 1);
+    // 旧：炮口偏移 25
+    EXPECT_EQ(stats.muzzleOffset, 25);
+}
+
+TEST(ConfigResolve, EnemyTiersMatchLegacyRuntimeValues)
+{
+    const Config cfg = ConfigLoader::loadFromDirectory(kConfigDir);
+    ASSERT_EQ(cfg.difficulties.size(), 3);
+
+    // 旧 enemy.cpp 那个三档 switch：speed / shootDelay / health
+    struct Expectation {
+        const char *id;
+        int health;
+        int hits;
+        double speed;
+        int delay;
+    };
+    const Expectation expected[] = {
+        {"easy", 4, 4, 2.5, 60},
+        {"normal", 6, 6, 3.0, 45},
+        {"hard", 8, 8, 4.0, 30},
+    };
+
+    for (int i = 0; i < 3; ++i) {
+        SCOPED_TRACE(expected[i].id);
+        ASSERT_EQ(cfg.difficulties.at(i).id, QString::fromLatin1(expected[i].id));
+
+        const TankStats stats = resolveEnemyStats(cfg, cfg.difficulties.at(i));
+        // 旧：100 / 150 / 200 血，挨的是玩家子弹 25 伤 -> 4 / 6 / 8 下
+        EXPECT_EQ(stats.health, expected[i].health);
+        EXPECT_EQ(stats.hitsToDestroy(), expected[i].hits);
+        EXPECT_DOUBLE_EQ(stats.moveSpeed, expected[i].speed);
+        EXPECT_EQ(stats.shootDelayTicks, expected[i].delay);
+        // 敌人子弹与玩家同源，同样是 8 像素/帧、1 伤
+        EXPECT_DOUBLE_EQ(stats.bulletSpeed, 8.0);
+        EXPECT_EQ(stats.bulletDamage, 1);
+    }
+}
+
+TEST(ConfigResolve, PlayerAndEnemyHitCountsAreIntentionallyDifferent)
+{
+    // 玩家 10 下才死、敌人 4 下就被打爆 —— 这是旧代码的真实手感，也是换算时
+    // 最容易被「两边都是 4」这种直觉带错的地方，所以单独钉一条。
+    const Config cfg = ConfigLoader::loadFromDirectory(kConfigDir);
+    const TankStats player = resolveTankStats(cfg, QStringLiteral("player"));
+    const TankStats easy = resolveEnemyStats(cfg, cfg.difficulties.at(0));
+
+    EXPECT_EQ(player.hitsToDestroy(), 10);
+    EXPECT_EQ(easy.hitsToDestroy(), 4);
+}
+
+TEST(ConfigResolve, BlockBehaviourMatchesLegacyCollisionRules)
+{
+    const Config cfg = ConfigLoader::loadFromDirectory(kConfigDir);
+
+    const auto *brick = cfg.block(QStringLiteral("brick"));
+    ASSERT_NE(brick, nullptr);
+    // 旧：100 血 ÷ 25 伤 = 4 下，且挡坦克、挡子弹
+    EXPECT_TRUE(brick->destructible);
+    EXPECT_EQ(brick->maxHealth, 4);
+    EXPECT_TRUE(brick->blocksTank);
+    EXPECT_TRUE(brick->blocksBullet);
+
+    const auto *steel = cfg.block(QStringLiteral("steel"));
+    ASSERT_NE(steel, nullptr);
+    // 旧：health = 200000（实为不可破）。这个数现在连 JSON 里都不需要存在，
+    // 不可破坏这件事由 destructible 表达。
+    EXPECT_FALSE(steel->destructible);
+    EXPECT_TRUE(steel->blocksTank);
+    EXPECT_TRUE(steel->blocksBullet);
+
+    const auto *sea = cfg.block(QStringLiteral("sea"));
+    ASSERT_NE(sea, nullptr);
+    // 旧：checkBulletCollision 跳过 SEA（子弹穿过），但挡坦克
+    EXPECT_TRUE(sea->blocksTank);
+    EXPECT_FALSE(sea->blocksBullet);
+
+    const auto *forest = cfg.block(QStringLiteral("forest"));
+    ASSERT_NE(forest, nullptr);
+    // 旧：坦克可穿过，降速 ×0.5（敌人侧 0.75 的不一致已在 M2 统一）
+    EXPECT_FALSE(forest->blocksTank);
+    EXPECT_FALSE(forest->blocksBullet);
+    EXPECT_DOUBLE_EQ(forest->moveSpeedFactor, 0.5);
+
+    const auto *ice = cfg.block(QStringLiteral("ice"));
+    ASSERT_NE(ice, nullptr);
+    EXPECT_FALSE(ice->blocksTank);
+    EXPECT_FALSE(ice->blocksBullet);
+    EXPECT_DOUBLE_EQ(ice->moveSpeedFactor, 1.5);
+}
+
+TEST(ConfigResolve, BulletDamageWasCollapsedIntoOneValue)
+{
+    // 旧代码三条判伤路径各写各的：打墙 25、打玩家 10、打敌人 25。
+    // 现在都取子弹自带的 damage，所以必须仍是每发 1 伤，才能让上述命中次数不变。
+    const Config cfg = ConfigLoader::loadFromDirectory(kConfigDir);
+    const auto *bullet = cfg.bullet(QStringLiteral("bulletBasic"));
+    ASSERT_NE(bullet, nullptr);
+    EXPECT_EQ(bullet->damage, 1);
+    EXPECT_DOUBLE_EQ(bullet->speed, 1.0); // 相对值，展开后为 8 像素/帧
 }

@@ -208,6 +208,18 @@ struct LevelLayer {
 };
 
 /**
+ * 关卡列表里的一项：序号 + 显示名。
+ *
+ * 序号与 `ConfigLoader::loadLevelByIndex()` 的 `index` 同义（0 起，文件为
+ * `level_(index+1).json`），UI 直接把它当作要开局的地图号回传给服务端。
+ */
+struct LevelEntry {
+    int index = -1;
+    QString id;    ///< 关卡文件里的 id（如 level_01）
+    QString name;  ///< 关卡文件里的 name，缺省时退回 id
+};
+
+/**
  * 一个关卡。
  *
  * 关卡只描述「哪里放了什么」，具体行为（是否阻挡、是否可破坏、贴图）一律由

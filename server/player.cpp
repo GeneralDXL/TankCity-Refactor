@@ -5,12 +5,13 @@
 #include <cmath>
 #include<QDateTime>
 
-Player::Player(Map *gameMap) : Tank(gameMap, 100, 5.0f, 10)
+Player::Player(Map *gameMap, const tankcity::config::TankStats &stats)
+    : Tank(gameMap, stats), maxHealth(stats.health)
 {
     // 初始化成员变量
     position = QPoint(0, 0);
     bodyAngle = 0; // 初始角度向上
-    health = 100;
+    health = maxHealth;
     shootCooldown = 0;
     turretAngle = 0;
     this->gameMap = gameMap;
@@ -20,7 +21,7 @@ void Player::init(int x, int y)
 {
     position = QPoint(x, y);
     bodyAngle = 0; // 初始角度向上
-    health = 100;
+    health = maxHealth;
     shootCooldown = 0;
     turretAngle = 0;
 }
@@ -47,14 +48,14 @@ Bullet* Player::shoot()
 
     // 计算子弹发射位置
     float rad = qDegreesToRadians(turretAngle);
-    int offsetX = static_cast<int>(25 * cos(rad));
-    int offsetY = static_cast<int>(25 * sin(rad));
+    int offsetX = static_cast<int>(muzzleOffset * cos(rad));
+    int offsetY = static_cast<int>(muzzleOffset * sin(rad));
     QPoint bulletPos = position + QPoint(offsetX, offsetY);
 
-    // 创建新子弹
-    return new Bullet(bulletPos, turretAngle, BulletType::Player,
-                      [this](const QRect& rect) {
-                          return this->gameMap->checkBulletCollision(rect);
+    // 创建新子弹（速度与伤害来自 entities.json 的子弹原型）
+    return new Bullet(bulletPos, turretAngle, BulletType::Player, bulletSpeed, bulletDamage,
+                      [this](const QRect& rect, int damage) {
+                          return this->gameMap->checkBulletCollision(rect, damage);
                       });
 }
 

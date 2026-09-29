@@ -5,8 +5,11 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonParseError>
+#include <QRegularExpression>
 #include <QSet>
 #include <QStringList>
+
+#include <algorithm>
 
 namespace tankcity::config {
 namespace {
@@ -1310,6 +1313,58 @@ LevelData ConfigLoader::loadLevelByIndex(const QString &levelsDir, int index, co
                           QStringLiteral("关卡文件不存在（序号 %1，约定文件名 level_NN.json）").arg(index));
 
     return parseLevel(file, config);
+}
+
+QVector<LevelEntry> ConfigLoader::listLevels(const QString &levelsDir)
+{
+    // 约定文件名 level_NN.json（关号 = 序号 + 1），与 loadLevelByIndex() 一致。
+    static const QRegularExpression namePattern(QStringLiteral("^level_(\\d+)\\.json$"));
+
+    const QDir dir(levelsDir);
+    if (!dir.exists())
+        return {};
+
+    QVector<LevelEntry> entries;
+    const QStringList names = dir.entryList({QStringLiteral("level_*.json")}, QDir::Files, QDir::Name);
+    for (const QString &name : names) {
+        const QRegularExpressionMatch match = namePattern.match(name);
+        if (!match.hasMatch())
+            continue;  // 形如 level_1_backup.json 的文件不参与列表
+
+        const int number = match.captured(1).toInt();
+        if (number <= 0) {
+            qWarning() << "关卡文件名不合法，已跳过：" << dir.filePath(name);
+            continue;
+        }
+
+        LevelEntry entry;
+        entry.index = number - 1;
+        entry.id = QStringLiteral("level_%1").arg(number, 2, 10, QLatin1Char('0'));
+
+        // 只读顶层 id / name；坏文件跳过而不是整份列表失败。
+        QFile file(dir.filePath(name));
+        if (!file.open(QIODevice::ReadOnly)) {
+            qWarning() << "关卡文件读不出来，列表中已跳过：" << file.fileName();
+            continue;
+        }
+        QJsonParseError error;
+        const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &error);
+        file.close();
+        if (error.error != QJsonParseError::NoError || !doc.isObject()) {
+            qWarning() << "关卡文件 JSON 解析失败，列表中已跳过：" << file.fileName()
+                       << error.errorString();
+            continue;
+        }
+
+        const QJsonObject root = doc.object();
+        entry.id = root.value(QStringLiteral("id")).toString(entry.id);
+        entry.name = root.value(QStringLiteral("name")).toString(entry.id);
+        entries.append(entry);
+    }
+
+    std::sort(entries.begin(), entries.end(),
+              [](const LevelEntry &a, const LevelEntry &b) { return a.index < b.index; });
+    return entries;
 }
 
 } // namespace tankcity::config
