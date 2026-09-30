@@ -2,29 +2,44 @@
 #include <QHostAddress>
 #include "server.h"
 
+namespace {
+
+/// 不带参数时的默认监听地址（M1.1）：与客户端写死的 127.0.0.1:12345 对齐，
+/// 本机自测不必再查参数。
+constexpr quint16 kDefaultPort = 12345;
+const char *const kDefaultAddress = "0.0.0.0";
+
+} // namespace
+
 int main(int argc, char *argv[])
 {
     QCoreApplication a(argc, argv);
-    
-    if (argc != 3) {
-        qCritical() << "Usage: server <IP> <port>";
+
+    // `[<IP> <port>]` 可整体缺省：给了就两个都给，没给就走默认。
+    // 只给一个参数无法判断那是 IP 还是端口，故直接拒绝，免得把端口当 IP 用。
+    QString ipStr = kDefaultAddress;
+    quint16 port = kDefaultPort;
+
+    if (argc == 3) {
+        ipStr = argv[1];
+        bool ok = false;
+        port = QString(argv[2]).toUShort(&ok);
+        if (!ok) {
+            qCritical() << "Invalid port number:" << argv[2];
+            return 1;
+        }
+    } else if (argc != 1) {
+        qCritical() << "Usage: tankcity_server [<IP> <port>]";
+        qCritical() << "Without arguments it listens on" << kDefaultAddress << ":" << kDefaultPort;
         return 1;
     }
-    
-    QString ipStr = argv[1];
+
     QHostAddress addr(ipStr);
     if (addr.isNull()) {
         qCritical() << "Invalid IP address:" << ipStr;
         return 1;
     }
 
-    bool ok;
-    quint16 port = QString(argv[2]).toUShort(&ok);
-    if (!ok) {
-        qCritical() << "Invalid port number:" << argv[2];
-        return 1;
-    }
-    
     GameServer server;
     if (!server.listen(addr, port)) {
         qCritical() << "Could not start server:" << server.errorString();
@@ -33,6 +48,6 @@ int main(int argc, char *argv[])
     qInfo() << "Server started on" << ipStr << ":" << port;
 
     QObject::connect(&server, &GameServer::stopServer, &a, &QCoreApplication::quit);
-    
+
     return a.exec();
 }
