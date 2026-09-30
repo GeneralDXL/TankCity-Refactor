@@ -86,6 +86,19 @@ ctest --test-dir build --output-on-failure   # 运行单元测试
 - 构建产物：`build/bin/tankcity_client.exe`、`build/bin/tankcity_server.exe`
 - 首次配置会通过 FetchContent 下载 GoogleTest；离线时可用 `-DBUILD_TESTING=OFF` 跳过测试。
 
+**启动**（先服务端，再客户端）：
+
+```bash
+./build/bin/tankcity_server                    # 默认监听 0.0.0.0:12345
+./build/bin/tankcity_server 127.0.0.1 12345    # 也可显式指定 <IP> <port>
+./build/bin/tankcity_client                    # 客户端连 127.0.0.1:12345
+```
+
+- 服务端是**控制台程序**，`qInfo()` / `qCritical()` 直接打在终端上：配置写错时会报出
+  「文件 + 字段路径 + 原因」，例如 `entities.json: bullets.bulletBasic —— 穿甲与弹射互斥：…`。
+- 数值与关卡都是数据文件（`assets/config/*.json`、`assets/levels/level_NN.json`）：
+  新增一张关卡只需把 `level_11.json` 放进 `assets/levels/`，**不必改代码**。
+
 ## 操作方式
 
 - **原始版本**：`W/S` 前进 / 后退，`A/D` 原地旋转
