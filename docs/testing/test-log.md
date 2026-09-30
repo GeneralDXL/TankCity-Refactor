@@ -25,3 +25,11 @@
 | 2026-09-29 | M1.0 | `6301c22` | `ctest` | 全部通过 | 1/1 通过（100%） | ✅ | GeneralDXL | 同上 |
 | 2026-09-29 | M1.0 | `6301c22` | GitHub Actions | Ubuntu + Windows 均通过 | success（3m19s） | ✅ | GeneralDXL | run `36511516536` |
 | 2026-09-29 | M1.0 | `6301c22` | 运行游戏（行为不变） | 界面/贴图正常；注册、登录、选关、进入游戏均正常 | 通过 | ✅ | GeneralDXL | 服务端需带 `<IP> <port>` 启动（历史遗留，转 M1.1 处理） |
+| 2026-09-30 | M2 | `3ef1b77` | CMake configure（干净构建目录） | 配置成功 | 成功（4.9s） | ✅ | GeneralDXL | Windows / Qt 6.9.2 / MinGW 13.1 / Ninja / Release |
+| 2026-09-30 | M2 | `3ef1b77` | 全量构建 | 客户端与服务端均编译链接成功 | 成功（19.0s） | ✅ | GeneralDXL | `tankcity_client` / `tankcity_server` / `tankcity_tests` 均产出 |
+| 2026-09-30 | M2 | `3ef1b77` | `ctest` | 全部通过 | 1/1 通过（100%，0.16s） | ✅ | GeneralDXL | 内含 54 个 gtest 用例 / 12 个套件全绿 |
+| 2026-09-30 | M2 | `3ef1b77` | GitHub Actions | Ubuntu + Windows 均通过 | success（ubuntu 2m46s / windows 4m49s） | ✅ | GeneralDXL | run `36612035952`（PR #5） |
+| 2026-09-30 | M2 | `3ef1b77` | DoD 2：数值只在 JSON 里定义 | `200000` / `2.5f` / `shootDelay = 60` 从 C++ 消失 | 三个锚点均清除（`2.5f` 仅剩 `enemy.cpp` 的 `i * 22.5f` 16 方向寻路角） | ✅ | GeneralDXL | 等价值由 `ConfigResolve.*` 5 项钉死 |
+| 2026-09-30 | M2 | `3ef1b77` | DoD 4：未知字段 / 互斥规则的报错定位 | 报出「文件 + 字段路径 + 原因」 | 两分支均报出，如 `entities.json: bullets.bulletBasic —— 穿甲与弹射互斥：…` | ✅ | GeneralDXL | 对正式 `entities.json` 做变异验证，已还原 |
+| 2026-09-30 | M2 | `3ef1b77` | DoD 5：新增关卡免改 C++ | 放进 `level_11.json` 即出现在列表，序号可回传服务端 | `LevelList.NewLevelFileAppearsWithoutCppChange` 通过（列表 11 项；序号 10 → `level_11.json`） | ✅ | GeneralDXL | 菜单实际呈现见下一行 |
+| 2026-10-01 | M2 | `3ef1b77` | 运行游戏（行为不变） | 界面/贴图正常；注册、登录、选关、进入游戏均正常；选关列表显示关卡文件里的 10 项名称 | 通过 | ✅ | GeneralDXL | 已知偏差：玩家血条按新尺度显示「10%」（M6 重做 UI）；服务端仍需带 `<IP> <port>` 启动（M1.1） |
