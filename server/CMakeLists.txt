@@ -34,6 +34,9 @@ if(WIN32)
     target_compile_definitions(tankcity_server PRIVATE _WIN32_WINNT=0x0601 NOMINMAX)
 endif()
 
+# 控制台程序（M1.1）：服务端不能是隐藏窗口的 GUI 程序 ——
+# 配置校验失败时的「文件 + 字段路径 + 原因」正是靠 qCritical() 报出来的，
+# 没有终端等于没报。客户端仍保持 GUI 子系统不变。
 set_target_properties(tankcity_server PROPERTIES
-    WIN32_EXECUTABLE TRUE
+    WIN32_EXECUTABLE FALSE
 )
