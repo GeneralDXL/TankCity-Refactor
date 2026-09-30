@@ -10,6 +10,24 @@
 #include<QDateTime>
 #include <memory>
 
+#include "clientconfig.h"
+
+namespace {
+
+/// 画玩家坦克用的原型数值。配置本身已缓存，解析也只在首次做一次。
+const tankcity::config::TankStats &playerTankStats()
+{
+    static const tankcity::config::TankStats stats = client::playerStats();
+    return stats;
+}
+
+/// 画第 difficulty 档敌人用的数值（难度只影响配色与初值，血量随后由服务端覆盖）。
+tankcity::config::TankStats enemyTankStats(int difficulty)
+{
+    return client::enemyStats(difficulty);
+}
+
+} // namespace
 
 GameWindow::GameWindow(QWidget *parent) : QWidget(parent)
 {
@@ -259,7 +277,7 @@ void GameWindow::onReadyRead()
         {
             qDebug() << "Received player tank update\n";
             // 更新玩家坦克状态
-            PlayerPainter *player = new PlayerPainter();
+            PlayerPainter *player = new PlayerPainter(playerTankStats());
             player->setPosition(QPoint(json["position"].toObject()["x"].toInt(),
                                        json["position"].toObject()["y"].toInt()));
             qDebug() << "Player position:" << player->getPosition() << '\n';
@@ -285,7 +303,8 @@ void GameWindow::onReadyRead()
             qDebug() << "Received enemy tank update\n";
             // 更新敌人坦克状态
             int enemyId = json["id"].toInt();
-            EnemyPainter *enemy = new EnemyPainter(json["difficulty"].toInt());
+            EnemyPainter *enemy = new EnemyPainter(json["difficulty"].toInt(),
+                                                    enemyTankStats(json["difficulty"].toInt()));
             enemy->setPosition(QPoint(json["position"].toObject()["x"].toInt(),
                                        json["position"].toObject()["y"].toInt()));
             
@@ -403,7 +422,7 @@ void GameWindow::onReadyRead()
 
                 }else
                 {
-                    PlayerPainter *newPlayer = new PlayerPainter();
+                    PlayerPainter *newPlayer = new PlayerPainter(playerTankStats());
                     newPlayer->setPosition(QPoint(playerObj["position"].toObject()["x"].toInt(),
                                                   playerObj["position"].toObject()["y"].toInt()));
                     newPlayer->setBodyAngle(playerObj["bodyAngle"].toDouble());
@@ -420,7 +439,8 @@ void GameWindow::onReadyRead()
                 QJsonObject enemyObj = enemyValue.toObject();
                 
                 int enemyId = enemyObj["id"].toInt();
-                EnemyPainter *newEnemy = new EnemyPainter(enemyObj["difficulty"].toInt());
+                EnemyPainter *newEnemy = new EnemyPainter(enemyObj["difficulty"].toInt(),
+                                                          enemyTankStats(enemyObj["difficulty"].toInt()));
                 newEnemy->setPosition(QPoint(enemyObj["position"].toObject()["x"].toInt(),
                                                 enemyObj["position"].toObject()["y"].toInt()));
                 newEnemy->setBodyAngle(enemyObj["bodyAngle"].toDouble());

@@ -4,10 +4,10 @@
 #include <QPainterPath>
 
 // bullet.cpp
-Bullet::Bullet(const QPoint &position, float angle, BulletType type,
+Bullet::Bullet(const QPoint &position, float angle, BulletType type, double speed, int damage,
                CollisionCheckFunc collisionCallback)
-    : position(position), angle(angle), type(type),
-    collisionCheckCallback(collisionCallback)
+    : position(position), angle(angle), type(type), speed(speed),
+    collisionCheckCallback(collisionCallback), injury(damage)
 {
 }
 
@@ -31,7 +31,7 @@ void Bullet::move()
     // 碰撞检测回调函数
     if (collisionCheckCallback) {
         // 只检查当前位置，不再检查路径上的点
-        if (collisionCheckCallback(QRect(position.x() - 5, position.y() - 5, 10, 10))) {
+        if (collisionCheckCallback(QRect(position.x() - 5, position.y() - 5, 10, 10), injury)) {
             // 遇到碰撞直接移出屏幕，以便被移除
             position = QPoint(-2000, -2000);
             return;

@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "order": ["easy", "normal", "hard"],
+  "difficulties": {
+    "easy": {
+      "enemyTank": "enemyBasic",
+      "overrides": { "health": 4, "speed": 0.5, "shootDelayTicks": 60 },
+      "spawn": { "intervalTicks": 150, "maxAlive": 3 },
+      "ai":    { "repathIntervalTicks": 60, "stuckThresholdTicks": 15 }
+    },
+
+    "normal": {
+      "enemyTank": "enemyBasic",
+      "overrides": { "health": 6, "speed": 0.6, "shootDelayTicks": 45 },
+      "spawn": { "intervalTicks": 100, "maxAlive": 4 },
+      "ai":    { "repathIntervalTicks": 60, "stuckThresholdTicks": 15 }
+    },
+
+    "hard": {
+      "enemyTank": "enemyBasic",
+      "overrides": { "health": 8, "speed": 0.8, "shootDelayTicks": 30 },
+      "spawn": { "intervalTicks": 70, "maxAlive": 5 },
+      "ai":    { "repathIntervalTicks": 60, "stuckThresholdTicks": 15 }
+    }
+  }
+}

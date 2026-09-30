@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "spawn": { "intervalTicks": 600, "maxOnField": 5 },
+  "items": {
+    "healthPack": {
+      "weight": 1.0,
+      "effects": [
+        { "type": "heal", "amount": 3, "maxHealth": 10 }
+      ]
+    },
+
+    "ammoBoost": {
+      "weight": 1.0,
+      "effects": [
+        { "type": "reduceShootDelay", "amount": 2, "minShootDelay": 5 }
+      ]
+    },
+
+    "speedBoost": {
+      "weight": 1.0,
+      "effects": [
+        { "type": "moveSpeedMultiplier", "multiplier": 1.5, "durationMs": 10000 }
+      ]
+    }
+  }
+}

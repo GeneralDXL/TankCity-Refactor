@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "renderOrder": ["background", "ground", "blocks", "entity", "overlay"],
+  "layers": {
+    "background": { "blocksTank": false, "blocksBullet": false, "blocksSight": false },
+    "ground":     { "blocksTank": false, "blocksBullet": false, "blocksSight": false },
+    "blocks":     { "blocksTank": true,  "blocksBullet": true,  "blocksSight": true  },
+    "entity":     { "blocksTank": false, "blocksBullet": false, "blocksSight": false },
+    "overlay":    { "blocksTank": false, "blocksBullet": false, "blocksSight": true  }
+  }
+}

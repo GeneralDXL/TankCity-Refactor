@@ -15,10 +15,18 @@ class Bullet
 {
 public:
     using Ptr = std::shared_ptr<Bullet>;        //使用智能指针
-    using CollisionCheckFunc = std::function<bool(const QRect&)>;   //实现碰撞机制检测
+    /**
+     * 碰撞检测回调：返回 true 表示子弹命中并应当消失。
+     *
+     * damage 由子弹自带（来自 entities.json）并随回调传回，是为了让「命中墙体就扣血」
+     * 与判定发生在同一处 —— 否则伤害值又得在 map.cpp 里再写一遍。
+     */
+    using CollisionCheckFunc = std::function<bool(const QRect&, int damage)>;   //实现碰撞机制检测
 
-    Bullet(const QPoint &position, float angle, BulletType type,
-           CollisionCheckFunc collisionCallback = nullptr);     //构造函数，分别有子弹的坐标，移动的角度，子弹的类型，碰撞检测（默认为空）
+    /// @param speed  像素 / 帧（调用方已按 tuning.baseBulletSpeed 把倍率展开）
+    /// @param damage 命中伤害（来自子弹原型）
+    Bullet(const QPoint &position, float angle, BulletType type, double speed, int damage,
+           CollisionCheckFunc collisionCallback = nullptr);     //构造函数，分别有子弹的坐标，移动的角度，子弹的类型，子弹速度、伤害，碰撞检测（默认为空）
 
     void move();                                        //子弹的移动
     bool isOutOfBounds(int width, int height) const;    //判断是否出界
@@ -33,9 +41,9 @@ private:
     QPoint position;                                    //子弹的位置
     float angle;                                        //转动的角度
     BulletType type;                                    //子弹类型
-    static const int speed = 8;                         //子弹速度
+    double speed;                                       //子弹速度（像素/帧，来自配置）
     CollisionCheckFunc collisionCheckCallback;          //检测子弹碰撞
-    const int injury = 25;                     //子弹伤害值
+    int injury;                                         //子弹伤害值（来自配置）
 };
 
 #endif // BULLET_H

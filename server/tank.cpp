@@ -1,8 +1,10 @@
 #include "tank.h"
 #include <QDebug>
 
-Tank::Tank(Map *gameMap, int health, double speed, int shootDelay)
-    : gameMap(gameMap), health(health), speed(speed), shootDelay(shootDelay)
+Tank::Tank(Map *gameMap, const tankcity::config::TankStats &stats)
+    : health(stats.health), speed(stats.moveSpeed), bulletSpeed(stats.bulletSpeed),
+      bulletDamage(stats.bulletDamage), muzzleOffset(stats.muzzleOffset),
+      shootDelay(stats.shootDelayTicks), gameMap(gameMap)
 {
     shootCooldown = 0;
 }
@@ -11,22 +13,14 @@ void Tank::move(float angle, float distance, Map *map)
 {
     if (shootCooldown > 0) shootCooldown--;
 
-    // 获取当前地形类型
-    int terrainType = map->getTerrainType(position);
-    // 计算移动向量
+    // 地形对移动的影响来自 blocks.json 的 moveSpeedFactor（森林 0.5、冰 1.5），
+    // 无影响时为 1.0。与旧代码「只认 FOREST/ICE 两个类型」等价 —— 取倍率而不是
+    // 判断类型，新增地形不必再改这里。
+    const float scale = static_cast<float>(map->getMoveSpeedFactor(position));
+    // 计算移动向量（乘 1.0f 是精确的，不受地形影响时与旧写法逐位一致）
     float rad = qDegreesToRadians(angle);
-    float moveX = cos(rad) * distance;
-    float moveY = sin(rad) * distance;
-    if(terrainType==FOREST)
-    {
-        moveX = cos(rad) * distance*0.5f;
-        moveY = sin(rad) * distance*0.5f;
-    }
-    else if(terrainType==ICE)
-    {
-        moveX = cos(rad) * distance*1.5f;
-        moveY = sin(rad) * distance*1.5f;
-    }
+    float moveX = cos(rad) * distance * scale;
+    float moveY = sin(rad) * distance * scale;
 
 
     QPoint newPos = position + QPoint(moveX, moveY);

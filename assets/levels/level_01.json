@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "id": "level_01",
+  "name": "地图 1",
+  "note": "由旧 server/map.cpp 的 Map::loadMap(0) 机械导出，未手工修改；边界由 boundary 属性生成，未出现在 rects 中。",
+  "world": { "width": 1200, "height": 900 },
+  "boundary": { "enabled": true, "thickness": 10 },
+  "layers": [
+    {
+      "layer": "blocks",
+      "format": "rects",
+      "rects": [
+        { "block": "steel"   , "rect": [10, 450, 390, 10] },
+        { "block": "steel"   , "rect": [400, 450, 10, 225] },
+        { "block": "steel"   , "rect": [600, 10, 10, 440] },
+        { "block": "steel"   , "rect": [200, 225, 400, 10] },
+        { "block": "steel"   , "rect": [800, 225, 10, 225] },
+        { "block": "steel"   , "rect": [1000, 225, 190, 10] },
+        { "block": "steel"   , "rect": [600, 675, 10, 215] },
+        { "block": "steel"   , "rect": [600, 675, 200, 10] },
+        { "block": "steel"   , "rect": [1000, 675, 10, 215] },
+        { "block": "steel"   , "rect": [1000, 225, 190, 10] }
+      ]
+    }
+  ]
+}

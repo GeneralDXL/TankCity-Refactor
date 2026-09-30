@@ -7,6 +7,37 @@
 #include <QDebug>
 #include <QLineEdit>
 
+#include "clientconfig.h"
+
+namespace {
+
+/**
+ * 用 assets/levels 下的关卡文件填充地图下拉框。
+ *
+ * 关卡名与序号都来自文件本身（见 clientconfig.h），所以**新增关卡不用改 C++**：
+ * 把 level_11.json 放进 assets/levels，这里就会多出第 11 项。
+ */
+void populateMapCombo(QComboBox *combo)
+{
+    combo->clear();
+    for (const tankcity::config::LevelEntry &level : client::levels())
+        combo->addItem(level.name, level.index);
+
+    if (combo->count() == 0)
+        combo->addItem(QStringLiteral("（未找到关卡文件）"), 0);
+}
+
+/// 下拉框当前项对应的关卡序号（0 起）；没有选中项时返回 0。
+int selectedMapIndex(const QComboBox *combo)
+{
+    if (!combo || combo->currentIndex() < 0)
+        return 0;
+    const QVariant data = combo->itemData(combo->currentIndex());
+    return data.isValid() ? data.toInt() : combo->currentIndex();
+}
+
+} // namespace
+
 MainWindow::MainWindow(const QString &username, QWidget *parent)
     : QMainWindow(parent), currentUsername(username)
 {
@@ -239,17 +270,7 @@ void MainWindow::setupGameSetup()
     QLabel *mapLabel = new QLabel("选择地图:", gameSetupWidget);
     mapLabel->setStyleSheet("font-size: 18px;");
     mapComboBox = new QComboBox(gameSetupWidget);
-    mapComboBox->clear();
-    mapComboBox->addItem("地图 1 - 钢铁走廊");
-    mapComboBox->addItem("地图 2 - 钢铁迷宫 ");
-    mapComboBox->addItem("地图 3 - 钢铁堡垒 ");
-    mapComboBox->addItem("地图 4 - 突破防线");
-    mapComboBox->addItem("地图 5 - 密林伏击");
-    mapComboBox->addItem("地图 6 - 冰封战场");
-    mapComboBox->addItem("地图 7 - 海峡封锁");
-    mapComboBox->addItem("地图 8 - 天险通道");
-    mapComboBox->addItem("地图 9 - 森林迷宫");
-    mapComboBox->addItem("地图 10 -环岛决战");
+    populateMapCombo(mapComboBox);
     mapComboBox->setStyleSheet("padding: 8px; border-radius: 5px; background-color: #34495e; color: #ecf0f1;");
     mapComboBox->setFixedSize(300, 40);
     mapLayout->addWidget(mapLabel);
@@ -312,7 +333,7 @@ void MainWindow::setupGameSetup()
 
     // 连接按钮信号
     connect(startGameButton, &QPushButton::clicked, this, [this]() {
-        int mapIndex = mapComboBox->currentIndex();
+        int mapIndex = selectedMapIndex(mapComboBox);
         int difficulty = difficultyComboBox->currentIndex();
         gameWindow->startGame(mapIndex, difficulty, 0);
         stackedWidget->setCurrentWidget(gameWindow);
@@ -348,16 +369,7 @@ void MainWindow::setupEndlessGameSetup()
     QLabel *mapLabel = new QLabel("选择地图:", endlessGameSetupWidget);
     mapLabel->setStyleSheet("font-size: 18px;");
     endlessMapComboBox = new QComboBox(endlessGameSetupWidget);
-    endlessMapComboBox->addItem("地图 1 - 钢铁走廊");
-    endlessMapComboBox->addItem("地图 2 - 钢铁迷宫 ");
-    endlessMapComboBox->addItem("地图 3 - 钢铁堡垒 ");
-    endlessMapComboBox->addItem("地图 4 - 突破防线");
-    endlessMapComboBox->addItem("地图 5 - 密林伏击");
-    endlessMapComboBox->addItem("地图 6 - 冰封战场");
-    endlessMapComboBox->addItem("地图 7 - 海峡封锁");
-    endlessMapComboBox->addItem("地图 8 - 天险通道");
-    endlessMapComboBox->addItem("地图 9 - 森林迷宫");
-    endlessMapComboBox->addItem("地图 10 -环岛决战");
+    populateMapCombo(endlessMapComboBox);
     endlessMapComboBox->setStyleSheet("padding: 8px; border-radius: 5px; background-color: #34495e; color: #ecf0f1;");
     endlessMapComboBox->setFixedSize(300, 40);
     mapLayout->addWidget(mapLabel);
@@ -420,7 +432,7 @@ void MainWindow::setupEndlessGameSetup()
 
     // 连接按钮信号
     connect(endlessStartGameButton, &QPushButton::clicked, this, [this]() {
-        int mapIndex = endlessMapComboBox->currentIndex();
+        int mapIndex = selectedMapIndex(endlessMapComboBox);
         int difficulty = endlessDifficultyComboBox->currentIndex();
         gameWindow->startGame(mapIndex, difficulty, 1);
         stackedWidget->setCurrentWidget(gameWindow);
@@ -447,16 +459,7 @@ void MainWindow::setupMultiplayerSetup()
     QLabel *mapLabel = new QLabel("选择地图:", multiplayerSetupWidget);
     mapLabel->setStyleSheet("font-size: 18px;");
     mapComboBoxMultiplayer = new QComboBox(multiplayerSetupWidget);  // 使用专用下拉框
-    mapComboBoxMultiplayer->addItem("地图 1 - 钢铁走廊");
-    mapComboBoxMultiplayer->addItem("地图 2 - 钢铁迷宫 ");
-    mapComboBoxMultiplayer->addItem("地图 3 - 钢铁堡垒 ");
-    mapComboBoxMultiplayer->addItem("地图 4 - 突破防线");
-    mapComboBoxMultiplayer->addItem("地图 5 - 密林伏击");
-    mapComboBoxMultiplayer->addItem("地图 6 - 冰封战场");
-    mapComboBoxMultiplayer->addItem("地图 7 - 海峡封锁");
-    mapComboBoxMultiplayer->addItem("地图 8 - 天险通道");
-    mapComboBoxMultiplayer->addItem("地图 9 - 森林迷宫");
-    mapComboBoxMultiplayer->addItem("地图 10 -环岛决战");
+    populateMapCombo(mapComboBoxMultiplayer);
     mapComboBoxMultiplayer->setStyleSheet("padding: 8px; border-radius: 5px; background-color: #34495e; color: #ecf0f1;");
     mapComboBoxMultiplayer->setFixedSize(300, 40);
     mapLayout->addWidget(mapLabel);
@@ -582,9 +585,9 @@ void MainWindow::onStartMultiplayer()
         return;
     }
 
-    int selectedMap = mapComboBoxMultiplayer->currentIndex();
+    int selectedMap = selectedMapIndex(mapComboBoxMultiplayer);
 
-    gameWindow->startGame(selectedMap, 1, 2); // 假设地图0，中等难度
+    gameWindow->startGame(selectedMap, 1, 2); // 难度固定为中等档，地图取下拉框当前项
     stackedWidget->setCurrentWidget(gameWindow);
 }
 

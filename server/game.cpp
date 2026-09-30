@@ -1,4 +1,7 @@
 #include "game.h"
+#include <QCoreApplication>
+#include <QDebug>
+#include <QDir>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -6,6 +9,93 @@
 #include <QDateTime>
 #include <QTimer>
 #include "server.h"
+
+namespace {
+
+/// 资产根目录：<exe 所在目录>/../../assets（exe 在 build/bin，仓库根在两级之上）。
+/// 用 applicationDirPath 而非相对当前目录，避免服务端被从仓库根启动时找不到资产。
+QString assetsRoot()
+{
+    return QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("../../assets"));
+}
+
+/**
+ * 医疗包回复量。旧代码是「+30，上限 100」，即补满 30% 血；血量尺度改为
+ * 10 之后同比例值就是 3（items.json 里 healthPack 的 heal.amount 也是 3）。
+ *
+ * 整条道具效果（含拾取时限、AmmoBoost 的减 CD、SpeedBoost 的倍率）尚未接线到
+ * items.json —— 那需要先定下 ItemType ↔ item id 的映射与权重生成，属 M3。
+ * 这里只把被「血量尺度变化」打破的这一处按新尺度对齐，避免出现 40/10 的血条。
+ */
+constexpr int kHealthPackHeal = 3;
+
+} // namespace
+
+bool Game::ensureConfig()
+{
+    if (m_configReady) return true;
+
+    const QString configDir = QDir(assetsRoot()).filePath(QStringLiteral("config"));
+    try {
+        m_config = tankcity::config::ConfigLoader::loadFromDirectory(configDir);
+        m_configReady = true;
+    } catch (const tankcity::config::ConfigError &e) {
+        qCritical() << "配置加载失败（" << configDir << "）：" << e.what();
+        return false;
+    }
+    return true;
+}
+
+bool Game::resolvePlayerStats(tankcity::config::TankStats &stats)
+{
+    if (!ensureConfig()) return false;
+
+    try {
+        stats = tankcity::config::resolveTankStats(m_config, QStringLiteral("player"));
+        return true;
+    } catch (const tankcity::config::ConfigError &e) {
+        qCritical() << "玩家数值解析失败：" << e.what();
+        return false;
+    }
+}
+
+bool Game::resolveCurrentEnemyStats(tankcity::config::TankStats &stats)
+{
+    if (!ensureConfig()) return false;
+
+    // 难度号来自客户端的选档（0/1/2），对应 difficulty.json 的 order 顺序。
+    // 越界在旧代码里是静默落进 switch 的 default（即不覆盖基类构造参数），
+    // 现在直接报错返回，避免出现数值不明的敌人。
+    if (currentDifficulty < 0 || currentDifficulty >= m_config.difficulties.size()) {
+        qCritical() << "难度档" << currentDifficulty << "越界，配置里只有"
+                    << m_config.difficulties.size() << "档";
+        return false;
+    }
+
+    try {
+        stats = tankcity::config::resolveEnemyStats(m_config,
+                                                   m_config.difficulties.at(currentDifficulty));
+        return true;
+    } catch (const tankcity::config::ConfigError &e) {
+        qCritical() << "敌人数值解析失败：" << e.what();
+        return false;
+    }
+}
+
+bool Game::loadLevelForIndex(int index)
+{
+    if (!ensureConfig()) return false;
+
+    const QString levelsDir = QDir(assetsRoot()).filePath(QStringLiteral("levels"));
+    try {
+        const tankcity::config::LevelData level =
+            tankcity::config::ConfigLoader::loadLevelByIndex(levelsDir, index, m_config);
+        return gameMap->loadLevel(level, m_config);
+    } catch (const tankcity::config::ConfigError &e) {
+        qCritical() << "关卡加载失败：" << e.what();
+        return false;
+    }
+}
 
 Game::Game()
 {
@@ -35,7 +125,10 @@ void Game::startEndlessGame(int mapIndex, int difficulty)
     this->currentDifficulty = difficulty;
     
     // 加载地图
-    gameMap->loadMap(mapIndex);
+    if (!loadLevelForIndex(this->mapIndex)) {
+        qCritical() << "关卡" << this->mapIndex << "装载失败，放弃开局";
+        return;
+    }
     
     // 设置游戏参数
     score = 0;
@@ -76,7 +169,10 @@ void Game::startEndlessGame(int mapIndex, int difficulty)
 void Game::startMultiGame(int mapIndex)
 {
     this->mapIndex = mapIndex;
-    gameMap->loadMap(mapIndex);
+    if (!loadLevelForIndex(this->mapIndex)) {
+        qCritical() << "关卡" << this->mapIndex << "装载失败，放弃开局";
+        return;
+    }
 
     score = 0;
     
@@ -103,7 +199,10 @@ void Game::startGame(int mapIndex, int difficulty)
     this->currentDifficulty = difficulty;
     
     // 加载地图
-    gameMap->loadMap(mapIndex);
+    if (!loadLevelForIndex(this->mapIndex)) {
+        qCritical() << "关卡" << this->mapIndex << "装载失败，放弃开局";
+        return;
+    }
     
     // 设置游戏参数
     score = 0;
@@ -146,10 +245,15 @@ void Game::addPlayer(int clientId)
     if (players.contains(clientId)) return;
     
     int playerX=80, playerY=400;
-    int type = gameMap->getTerrainType(QPoint(playerX,playerY));
-    
+
+    tankcity::config::TankStats stats;
+    if (!resolvePlayerStats(stats)) {
+        qCritical() << "玩家数值不可用，放弃创建玩家";
+        return;
+    }
+
     // 创建玩家坦克
-    auto player = std::make_shared<Player>(gameMap);
+    auto player = std::make_shared<Player>(gameMap, stats);
     player->init(playerX, playerY);
     players.insert(clientId, player);
     oneOfId = clientId;
@@ -325,7 +429,8 @@ void Game::applyItemEffect(int playerId, ItemType type) {
 
     switch (type) {
     case ItemType::HealthPack:
-        player->setHealth(qMin(player->getHealth() + 30, 100));
+        // 上限不能再写 100：玩家满血已由配置决定（10），否则会回出超过满血的血条。
+        player->setHealth(qMin(player->getHealth() + kHealthPackHeal, player->getMaxHealth()));
         break;
     case ItemType::AmmoBoost:
         player->setShootDelay(qMax(5, player->getShootDelay() - 2));
@@ -489,8 +594,8 @@ void Game::checkCollisions()
             continue;
         }
         
-        // 检查墙壁碰撞
-        if (gameMap->checkBulletCollision(bullet->getRect())) {
+        // 检查墙壁碰撞（伤害取自子弹原型，与子弹自身 move() 里的判定同源）
+        if (gameMap->checkBulletCollision(bullet->getRect(), bullet->getInjury())) {
             it = bullets.erase(it);
             continue;
         }
@@ -507,7 +612,8 @@ void Game::checkCollisions()
                 }
 
                 if (bullet->getRect().intersects(player->getRect())) {
-                    player->takeDamage(10);
+                    // 伤害取自子弹原型（旧代码写死 10，等价于 1 伤 × 玩家 10 血）
+                    player->takeDamage(bullet->getInjury());
                     hitPlayer = true;
                     
                     if (player->isDestroyed()) {
@@ -549,7 +655,8 @@ void Game::checkCollisions()
                 if (enemiesToRemove.contains(enemy)) continue;
                 
                 if (bullet->getRect().intersects(enemy->getRect())) {
-                    enemy->takeDamage(25);
+                    // 伤害取自子弹原型（旧代码写死 25，等价于 1 伤 × 敌人 4/6/8 血）
+                    enemy->takeDamage(bullet->getInjury());
                     hitEnemy = true;
 
                     
@@ -636,7 +743,13 @@ void Game::spawnEnemy()
         y = 300;
     }
     
-    auto enemy = std::make_shared<Enemy>(gameMap, QPoint(x, y), currentDifficulty);
+    tankcity::config::TankStats stats;
+    if (!resolveCurrentEnemyStats(stats)) {
+        qCritical() << "敌人数值不可用，放弃生成敌人";
+        return;
+    }
+
+    auto enemy = std::make_shared<Enemy>(gameMap, QPoint(x, y), currentDifficulty, stats);
     enemies.append(enemy);
     
     // 广播新敌人

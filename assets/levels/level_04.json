@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "id": "level_04",
+  "name": "砖墙迷宫",
+  "note": "由旧 server/map.cpp 的 Map::loadMap(3) 机械导出，未手工修改；边界由 boundary 属性生成，未出现在 rects 中。",
+  "world": { "width": 1200, "height": 900 },
+  "boundary": { "enabled": true, "thickness": 10 },
+  "layers": [
+    {
+      "layer": "blocks",
+      "format": "rects",
+      "rects": [
+        { "block": "steel"   , "rect": [10, 150, 150, 10] },
+        { "block": "steel"   , "rect": [150, 300, 10, 300] },
+        { "block": "steel"   , "rect": [150, 600, 150, 10] },
+        { "block": "steel"   , "rect": [300, 600, 10, 290] },
+        { "block": "steel"   , "rect": [600, 300, 160, 10] },
+        { "block": "steel"   , "rect": [750, 150, 10, 150] },
+        { "block": "steel"   , "rect": [750, 150, 300, 10] },
+        { "block": "steel"   , "rect": [900, 150, 10, 300] },
+        { "block": "steel"   , "rect": [1050, 10, 10, 300] },
+        { "block": "steel"   , "rect": [1050, 450, 10, 150] },
+        { "block": "brick"   , "rect": [300, 10, 10, 140] },
+        { "block": "brick"   , "rect": [300, 150, 10, 150] },
+        { "block": "brick"   , "rect": [300, 300, 10, 150] },
+        { "block": "brick"   , "rect": [300, 150, 150, 10] },
+        { "block": "brick"   , "rect": [300, 300, 150, 10] },
+        { "block": "brick"   , "rect": [450, 150, 150, 10] },
+        { "block": "brick"   , "rect": [450, 300, 10, 150] },
+        { "block": "brick"   , "rect": [450, 450, 10, 150] },
+        { "block": "brick"   , "rect": [450, 450, 150, 10] },
+        { "block": "brick"   , "rect": [600, 10, 10, 150] },
+        { "block": "brick"   , "rect": [600, 450, 10, 150] },
+        { "block": "brick"   , "rect": [600, 600, 10, 150] },
+        { "block": "brick"   , "rect": [600, 450, 150, 10] },
+        { "block": "brick"   , "rect": [600, 600, 150, 10] },
+        { "block": "brick"   , "rect": [750, 750, 10, 140] },
+        { "block": "brick"   , "rect": [750, 600, 150, 10] },
+        { "block": "brick"   , "rect": [750, 750, 150, 10] },
+        { "block": "brick"   , "rect": [900, 750, 150, 10] },
+        { "block": "brick"   , "rect": [1050, 450, 140, 10] },
+        { "block": "brick"   , "rect": [1050, 600, 140, 10] },
+        { "block": "brick"   , "rect": [1050, 750, 140, 10] }
+      ]
+    }
+  ]
+}

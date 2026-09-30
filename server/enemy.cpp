@@ -11,8 +11,9 @@
 int Enemy::ID = 0;
 
 
-Enemy::Enemy(Map *gameMap, const QPoint &position, int difficulty)
-    : Tank(gameMap, 100, 0.3, 30),  // 调用基类构造函数
+Enemy::Enemy(Map *gameMap, const QPoint &position, int difficulty,
+             const tankcity::config::TankStats &stats)
+    : Tank(gameMap, stats),       // 调用基类构造函数
     difficulty(difficulty)         // 初始化派生类成员
 {
     this->position = position;
@@ -21,24 +22,8 @@ Enemy::Enemy(Map *gameMap, const QPoint &position, int difficulty)
     changeDirectionTimer = 0;
     shootTimer = 0;
 
-    // 根据难度调整属性
-    switch (difficulty) {
-    case 0: // 简单
-        speed = 2.5;
-        shootDelay = 60;
-        health=100;
-        break;
-    case 1: // 中等
-        speed = 3;
-        shootDelay = 45;
-        health=150;
-        break;
-    case 2: // 困难
-        speed = 4;
-        shootDelay = 30;
-        health=200;
-        break;
-    }
+    // 速度 / 射击间隔 / 血量一律来自 difficulty.json 的对应档位（含 overrides），
+    // 见 tankcity::config::resolveEnemyStats()；难度号只作为标识保留（协议与贴图要用）。
 
     id = ++ID;
 }
@@ -372,15 +357,12 @@ void Enemy::update(const QPoint &playerPos, Map *map)
             // 更新车身角度
             bodyAngle = qRadiansToDegrees(qAtan2(moveY, moveX));
 
-            // 应用地形效果
-            int terrainType = map->getTerrainType(position);
-            if (terrainType == FOREST) {
-                moveX *= 0.75f;
-                moveY *= 0.75f;
-            } else if (terrainType == ICE) {
-                moveX *= 1.5f;
-                moveY *= 1.5f;
-            }
+            // 应用地形效果：倍率来自 blocks.json 的 moveSpeedFactor
+            // （旧代码这里森林写 0.75、玩家侧写 0.5，同一地形两套数值，M2 起统一；
+            //   无地形影响时为 1.0，乘 1.0f 是精确的，与旧写法一致）
+            const float scale = static_cast<float>(map->getMoveSpeedFactor(position));
+            moveX *= scale;
+            moveY *= scale;
 
             QPoint newPos = position + QPoint(moveX, moveY);
 
@@ -442,13 +424,9 @@ void Enemy::update(const QPoint &playerPos, Map *map)
         }
     } else {
         // ====== 增强的无路径移动策略 ======
-        float actualSpeed = speed;
-        int terrainType = map->getTerrainType(position);
-        if (terrainType == ICE) {
-            actualSpeed = speed * 1.5f;
-        } else if(terrainType == FOREST) {
-            actualSpeed = speed * 0.75f;
-        }
+        // 地形倍率同样来自配置（森林由旧代码的 0.75 统一为 0.5）
+        const float actualSpeed =
+            speed * static_cast<float>(map->getMoveSpeedFactor(position));
 
         // 计算指向玩家的方向
         QPointF directionToPlayer = playerPos - position;
@@ -503,15 +481,16 @@ Bullet* Enemy::shoot()
 
         // 根据炮管角度计算子弹位置
         float rad = qDegreesToRadians(turretAngle);
-        QPoint bulletPos = position + QPoint(25 * cos(rad), 25 * sin(rad));
+        QPoint bulletPos = position + QPoint(muzzleOffset * cos(rad), muzzleOffset * sin(rad));
 
         // 获取地图指针（确保回调函数不依赖敌人实例）
         Map* mapPtr = this->gameMap;
 
-        // 创建新子弹（使用地图指针而非this）
+        // 创建新子弹（使用地图指针而非this；速度与伤害来自 entities.json）
         return new Bullet(bulletPos, static_cast<int>(turretAngle), BulletType::Enemy,
-                          [mapPtr](const QRect& rect) {  // 修改：捕获地图指针
-                              return mapPtr->checkBulletCollision(rect);
+                          bulletSpeed, bulletDamage,
+                          [mapPtr](const QRect& rect, int damage) {  // 修改：捕获地图指针
+                              return mapPtr->checkBulletCollision(rect, damage);
                           });
     }
 

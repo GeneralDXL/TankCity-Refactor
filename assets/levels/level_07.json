@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "id": "level_07",
+  "name": "海峡",
+  "note": "由旧 server/map.cpp 的 Map::loadMap(6) 机械导出，未手工修改；边界由 boundary 属性生成，未出现在 rects 中。",
+  "world": { "width": 1200, "height": 900 },
+  "boundary": { "enabled": true, "thickness": 10 },
+  "layers": [
+    {
+      "layer": "blocks",
+      "format": "rects",
+      "rects": [
+        { "block": "sea"     , "rect": [500, 120, 200, 640] },
+        { "block": "steel"   , "rect": [470, 140, 30, 40] },
+        { "block": "steel"   , "rect": [540, 140, 30, 40] },
+        { "block": "steel"   , "rect": [630, 140, 30, 40] },
+        { "block": "steel"   , "rect": [700, 140, 30, 40] },
+        { "block": "steel"   , "rect": [470, 820, 30, 40] },
+        { "block": "steel"   , "rect": [540, 820, 30, 40] },
+        { "block": "steel"   , "rect": [630, 820, 30, 40] },
+        { "block": "steel"   , "rect": [700, 820, 30, 40] },
+        { "block": "steel"   , "rect": [200, 200, 40, 40] },
+        { "block": "steel"   , "rect": [100, 400, 60, 20] },
+        { "block": "steel"   , "rect": [150, 600, 40, 40] },
+        { "block": "steel"   , "rect": [950, 200, 40, 40] },
+        { "block": "steel"   , "rect": [1020, 400, 60, 20] },
+        { "block": "steel"   , "rect": [1000, 600, 40, 40] },
+        { "block": "steel"   , "rect": [400, 300, 40, 300] },
+        { "block": "steel"   , "rect": [760, 300, 40, 300] }
+      ]
+    }
+  ]
+}

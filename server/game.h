@@ -10,11 +10,17 @@
 #include "enemy.h"
 #include "bullet.h"
 #include "map.h"
+#include "config/ConfigLoader.h"
+#include "config/TankStats.h"
 #include <QSharedPointer>
 
+// 说明：下面的道具数值目前仍是代码里的固定值，尚未接线到 assets/config/items.json
+// （需要先定下 ItemType ↔ item id 的映射与权重生成，属 M3）。其中「生命恢复」一项
+// 已随血量尺度的变化按新口径对齐（见 game.cpp 的 kHealthPackHeal）。
+//
 // 生命恢复 (HealthPack):
-//     恢复30点生命值
-//     生命值上限100
+//     恢复满血的 30%（旧数值为 +30、上限 100）
+//     上限 = 玩家满血值（配置里为 10）
 //     客户端显示为绿色圆圈
 // 弹药增强 (AmmoBoost):
 //     减少射击冷却时间2ms
@@ -74,6 +80,27 @@ private slots:
     void onWallDelete(const QJsonObject &json); // 处理墙删除事件
 
 private:
+    /**
+     * 装载第 index 张关卡（0 起，对应 assets/levels/level_NN.json）。
+     *
+     * 配置只加载一次并缓存；关卡文件或配置有问题时返回 false 且不留下半张地图，
+     * 调用方据此放弃开局 —— 旧代码遇到坏数据是静默地跑一张空地图。
+     */
+    bool loadLevelForIndex(int index);
+
+    /// 首次使用时加载六份配置；失败返回 false 并已记录日志。
+    bool ensureConfig();
+
+    /**
+     * 解析玩家 / 当前难度敌人的运行时数值（血量、速度、射击间隔、子弹速度与伤害）。
+     *
+     * 数值全部来自 entities.json + difficulty.json + game.json 的 tuning，
+     * 换算规则见 shared/config/TankStats.h。失败时记录日志并返回 false，
+     * 调用方应当放弃创建实体而不是用 0 值凑合。
+     */
+    bool resolvePlayerStats(tankcity::config::TankStats &stats);
+    bool resolveCurrentEnemyStats(tankcity::config::TankStats &stats);
+
     void updateGame();
     void checkCollisions();
     void spawnEnemy();
@@ -94,6 +121,10 @@ private:
     
     Map *gameMap;
     QTimer *gameTimer;
+
+    // 六份配置合一（game/layers/blocks/entities/items/difficulty），首次开局时加载
+    tankcity::config::Config m_config;
+    bool m_configReady = false;
 
 
     int currentDifficulty;

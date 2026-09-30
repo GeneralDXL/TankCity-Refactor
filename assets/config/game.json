@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "world": {
+    "tileSize": 40,
+    "boundaryThickness": 10
+  },
+  "loop": {
+    "ticksPerSecond": 60
+  },
+  "tuning": {
+    "baseMoveSpeed": 5.0,
+    "baseBulletSpeed": 8.0
+  }
+}
