@@ -89,10 +89,17 @@ ctest --test-dir build --output-on-failure   # 运行单元测试
 **启动**（先服务端，再客户端）：
 
 ```bash
+# 服务端：资产按 exe 位置解析，从任意工作目录启动均可
 ./build/bin/tankcity_server                    # 默认监听 0.0.0.0:12345
 ./build/bin/tankcity_server 127.0.0.1 12345    # 也可显式指定 <IP> <port>
-./build/bin/tankcity_client                    # 客户端连 127.0.0.1:12345
+
+# 客户端：贴图仍走 ./../../assets 相对路径，必须在 build/bin 下启动
+cd build/bin
+./tankcity_client                              # 客户端连 127.0.0.1:12345
 ```
+
+> ⚠️ 客户端的工作目录**必须是 `build/bin`**：贴图与按钮图标用的是 `./../../assets/...`，只有该目录能解析到仓库根的 `assets/`（从仓库根或 `build/` 启动都会静默丢失全部贴图）。
+> 服务端已在 M2 改用 `applicationDirPath()`，不受影响；客户端这一处将在 M1.1 的 `engine/asset`（`AssetManager`）中一并修掉。
 
 - 服务端是**控制台程序**，`qInfo()` / `qCritical()` 直接打在终端上：配置写错时会报出
   「文件 + 字段路径 + 原因」，例如 `entities.json: bullets.bulletBasic —— 穿甲与弹射互斥：…`。
