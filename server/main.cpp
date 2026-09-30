@@ -47,7 +47,11 @@ int main(int argc, char *argv[])
     }
     qInfo() << "Server started on" << ipStr << ":" << port;
 
-    QObject::connect(&server, &GameServer::stopServer, &a, &QCoreApplication::quit);
-
+    // 停机清理由 ~GameServer() 兜底；服务端目前靠外部终止（关控制台窗口 / Ctrl+C）。
+    //
+    // 这里原本还有一行 `connect(&server, &GameServer::stopServer, &a, &QCoreApplication::quit)`，
+    // 但 stopServer() 是 slot 而不是 signal —— Qt 只打一条 "signal not found" 警告就静默失效，
+    // 而此前服务端是隐藏窗口的 GUI 程序，这条警告一直被埋在调试输出里。
+    // 改成控制台程序（M1.1）后它才现形，故删除；优雅停机留到 M5 网络统一时一并做。
     return a.exec();
 }
