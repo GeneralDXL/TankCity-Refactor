@@ -4,7 +4,8 @@
 #include <QWidget>
 #include <QTimer>
 #include <QTcpSocket>
-#include "painter.h"
+#include "render/painter.h"
+#include "render/TextureCache.h"
 
 enum class ItemType {
     HealthPack,     // 生命恢复
@@ -59,6 +60,11 @@ private:
     QSet<int> pressedKeys; // 存储按下的键
 
     QMap<int, std::shared_ptr<PlayerPainter>> players;
+
+    /// 地图贴图缓存（每个文件只加载一次）。
+    /// 资源根目录仍是相对当前工作目录 —— 与搬迁前完全一致（客户端必须在 build/bin 下启动），
+    /// M1.1 后面的 engine/asset 会把它改成按可执行文件定位。
+    engine::render::TextureCache textureCache_{QStringLiteral("./../../assets")};
     QList<std::shared_ptr<EnemyPainter>> enemies;
     std::vector<std::shared_ptr<BulletPainter>> bullets;
 

@@ -1,4 +1,6 @@
 #include "gamewindow.h"
+
+#include "render/QPainterBackend.h"
 #include <QPainter>
 #include <QMessageBox>
 #include <QPushButton>
@@ -93,7 +95,10 @@ void GameWindow::paintEvent(QPaintEvent *event)
     }
 
 
-    gameMap->draw(painter);
+    // 地图层走 engine/render 的原语（贴图缓存 + 绘制后端）；
+    // 坦克/子弹这些美术仍是客户端自己的 QPainter 代码（决议 D3-A）。
+    engine::render::QPainterBackend backend(painter);
+    gameMap->draw(backend, textureCache_);
 
     
     for (auto player : players) {

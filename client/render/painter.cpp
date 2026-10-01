@@ -13,42 +13,58 @@ MapPainter::MapPainter()
     mapIndex = 0; // 默认地图索引
 }
 
-void MapPainter::draw(QPainter &painter)
-{
-    QPixmap bricktex("./../../assets/images/textures/brick.jpg");
-    QPixmap steeltex("./../../assets/images/textures/steel.jpg");
-    QPixmap foresttex("./../../assets/images/textures/forest.jpg");
-    QPixmap seatex("./../../assets/images/textures/sea.jpg");
-    QPixmap icetex("./../../assets/images/textures/ice.jpg");
+namespace {
 
+/// 物块类型 -> 贴图路径（相对资源根目录）。
+///
+/// **这张表就是 M6 换贴图时唯一要改的地方**。类型号的含义来自服务端协议里的
+/// `wallType`（边界 0 / 砖 1 / 钢 2 / 森林 3 / 海 4 / 冰 5），客户端不 include
+/// `game/entity/wall.h` —— 两个程序只通过 JSON 字段对齐（见 M1.1 决议 D4）。
+struct BlockTextureEntry
+{
+    int type;
+    const char *path;
+};
+
+const BlockTextureEntry kBlockTextures[] = {
+    {1, "images/textures/brick.jpg"},
+    {2, "images/textures/steel.jpg"},
+    {3, "images/textures/forest.jpg"},
+    {4, "images/textures/sea.jpg"},
+    {5, "images/textures/ice.jpg"},
+};
+
+const char *texturePathOfType(int type)
+{
+    for (const BlockTextureEntry &entry : kBlockTextures) {
+        if (entry.type == type)
+            return entry.path;
+    }
+    return nullptr;
+}
+
+} // namespace
+
+void MapPainter::draw(engine::render::IRenderer &renderer, engine::render::TextureCache &textures)
+{
     for (const WallPainter &wall : walls)
     {
-        QRect rect = wall.getRect();
+        const QRect rect = wall.getRect();
+        const int type = wall.getType();
 
-        switch (wall.getType())
-        {
-        case 0://灰墙
-            painter.setBrush(QBrush(QColor(150, 150, 150)));
-            painter.drawRect(rect);
-            break;
-        case 1: // 砖墙纹理
-            painter.drawPixmap(rect, bricktex);
-            break;
-        case 2: // 钢铁纹理
-            painter.drawPixmap(rect, steeltex);
-            break;
-        case 3: // 森林纹理
-            painter.drawPixmap(rect, foresttex);
-            break;
-        case 4://海洋纹理
-            painter.drawPixmap(rect,seatex);
-            break;
-        case 5://冰块纹理
-            painter.drawPixmap(rect,icetex);
-            break;
+        if (type == 0) {
+            // 旧代码这一支是 `setBrush(灰) + drawRect`，当时的画笔是 QPainter 的默认黑笔，
+            // 所以实际画的是「灰底 + 黑边」。只填充不描边会丢掉那圈边框，故两个颜色都给。
+            renderer.drawRect(rect, QColor(150, 150, 150), Qt::black);
+            continue;
         }
-    }
 
+        const char *path = texturePathOfType(type);
+        if (path == nullptr)
+            continue;   // 未知类型：旧 switch 没有 default，同样什么都不画
+
+        renderer.drawTexture(textures.texture(QLatin1String(path)), rect);
+    }
 }
 
 // 血量与射击间隔不再写在这里：它们来自 assets/config（见 clientconfig.cpp）。

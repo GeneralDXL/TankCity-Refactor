@@ -6,6 +6,8 @@
 #include <QVector>
 
 #include "config/TankStats.h"
+#include "render/IRenderer.h"
+#include "render/TextureCache.h"
 
 class WallPainter {
 public:
@@ -26,7 +28,13 @@ private:
 class MapPainter {
 public:
     MapPainter();
-    void draw(QPainter &painter);
+    /**
+     * 地图绘制。
+     *
+     * 贴图由 `engine/render` 提供（`TextureCache` 按路径缓存、`IRenderer` 负责画），
+     * 而「哪种物块用哪张贴图」是本层的事（见 painter.cpp 的 kBlockTextures）。
+     */
+    void draw(engine::render::IRenderer &renderer, engine::render::TextureCache &textures);
     void clearWalls() { walls.clear(); }
     void addWall(const WallPainter &wall) { walls.append(wall); }
     void removeWall(int id) {

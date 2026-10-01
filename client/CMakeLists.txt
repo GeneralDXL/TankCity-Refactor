@@ -16,8 +16,8 @@ qt_add_executable(tankcity_client
     scoreboard.h
     registerwindow.cpp
     registerwindow.h
-    painter.cpp
-    painter.h
+    render/painter.cpp
+    render/painter.h
     loadingwidget.cpp
     loadingwidget.h
 )
@@ -25,6 +25,7 @@ qt_add_executable(tankcity_client
 target_link_libraries(tankcity_client PRIVATE
     Qt6::Widgets
     Qt6::Network
+    tankcity_engine_render   # 地图绘制原语与贴图缓存（engine/render）
     tankcity_shared   # 读 assets/config：数值只允许有一处来源，客户端不另留副本
 )
 
