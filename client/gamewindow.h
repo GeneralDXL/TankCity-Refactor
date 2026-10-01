@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QTimer>
 #include <QTcpSocket>
+#include "input/InputTracker.h"
 #include "render/painter.h"
 #include "render/TextureCache.h"
 
@@ -56,8 +57,9 @@ private:
 
     QTimer *gameTimer;
     MapPainter *gameMap;
-    QPoint mousePos;
-    QSet<int> pressedKeys; // 存储按下的键
+    /// 输入状态容器（engine/input）：按键集合 + 指针位置 + 边沿触发的主键。
+    /// 容器不认识「哪个键算什么」——那张键位表在 sendKey() 里（属客户端的事）。
+    engine::input::InputTracker inputTracker_;
 
     QMap<int, std::shared_ptr<PlayerPainter>> players;
 

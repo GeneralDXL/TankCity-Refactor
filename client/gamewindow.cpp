@@ -1,5 +1,6 @@
 #include "gamewindow.h"
 
+#include "core/GameLoop.h"   // engine/core：kTickMs
 #include "render/QPainterBackend.h"
 #include <QPainter>
 #include <QMessageBox>
@@ -356,7 +357,7 @@ void GameWindow::onReadyRead()
             score = 0;
             gameRunning = true;
             gamePaused = false;
-            gameTimer->start(16); // 每秒60帧
+            gameTimer->start(engine::core::kTickMs); // 上行频率 = 逻辑帧长（唯一定义在 engine/core）
 
         }
         else if (type == "map_init")
@@ -548,32 +549,30 @@ void GameWindow::sendToServer(const QJsonObject &json)
 
 void GameWindow::keyPressEvent(QKeyEvent *event)
 {
-    if (event->key() == Qt::Key_W || event->key() == Qt::Key_A ||
-        event->key() == Qt::Key_S || event->key() == Qt::Key_D ) {
-        pressedKeys.insert(event->key());
-    }
+    // 容器不作键位解释，原样记录；上行时只取用 W/A/S/D（键位表在 sendKey() 里）。
+    // 相比搬迁前"只记录 WASD"，这里记录任意键，但上行的 JSON 字段完全没变。
+    inputTracker_.keyPressed(event->key());
     sendKey();
 }
 
 void GameWindow::keyReleaseEvent(QKeyEvent *event)
 {
-    if (event->key() == Qt::Key_W || event->key() == Qt::Key_A ||
-        event->key() == Qt::Key_S || event->key() == Qt::Key_D ) {
-        pressedKeys.remove(event->key());
-    }
+    // 对任意键都记录松开：只记录 WASD 的话，其它键会永远留在按下集合里。
+    inputTracker_.keyReleased(event->key());
     sendKey();
 }
 
 void GameWindow::mouseMoveEvent(QMouseEvent *event)
 {
-    mousePos = event->pos();
+    inputTracker_.setPointer(event->pos());
     sendKey();
 }
 
 void GameWindow::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton) {
-        pressedKeys.insert(Qt::LeftButton);
+        // 边沿事件：按下记一次，而不是"左键按着"这个状态 —— 这是长按不连发的前提。
+        inputTracker_.primaryButtonPressed();
     }
     sendKey();
 }
@@ -585,20 +584,23 @@ void GameWindow::sendKey()
 
     input["type"] = "key_input";
     
+    // 取一次快照：主键的待发标记在这一步被取走 —— 这就是「长按不连发」的实现。
+    const engine::input::InputTracker::Snapshot snapshot = inputTracker_.takeSnapshot();
+
     QJsonObject keys;
-    keys["w"] = pressedKeys.contains(Qt::Key_W);
-    keys["a"] = pressedKeys.contains(Qt::Key_A);
-    keys["s"] = pressedKeys.contains(Qt::Key_S);
-    keys["d"] = pressedKeys.contains(Qt::Key_D);
+    keys["w"] = snapshot.keysDown.contains(Qt::Key_W);
+    keys["a"] = snapshot.keysDown.contains(Qt::Key_A);
+    keys["s"] = snapshot.keysDown.contains(Qt::Key_S);
+    keys["d"] = snapshot.keysDown.contains(Qt::Key_D);
     input["keys"] = keys;
 
     QJsonObject mousePosObj;
-    mousePosObj["x"] = mousePos.x();
-    mousePosObj["y"] = mousePos.y();
+    mousePosObj["x"] = snapshot.pointer.x();
+    mousePosObj["y"] = snapshot.pointer.y();
     input["mousePos"] = mousePosObj;
     
-    input["shoot"] = pressedKeys.contains(Qt::LeftButton);
-    pressedKeys.remove(Qt::LeftButton); // 清除左键按下状态，避免重复发送
+    // 边沿触发：待发标记已在取快照时清除，所以一次点击只发一次 true（长按不连发）。
+    input["shoot"] = snapshot.primaryPressed;
 
     sendToServer(input);
 }
@@ -654,5 +656,5 @@ void GameWindow::startGame(int mapIndex, int difficulty, int mode)
             break;
     }
     sendToServer(json);
-    pressedKeys.clear();
+    inputTracker_.reset();   // 等价于搬迁前"清空按键集合"：清掉残留按键
 }

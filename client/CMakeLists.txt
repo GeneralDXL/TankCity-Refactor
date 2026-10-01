@@ -25,7 +25,9 @@ qt_add_executable(tankcity_client
 target_link_libraries(tankcity_client PRIVATE
     Qt6::Widgets
     Qt6::Network
+    tankcity_engine_core     # kTickMs：全仓库唯一的「一帧」定义
     tankcity_engine_render   # 地图绘制原语与贴图缓存（engine/render）
+    tankcity_engine_input    # 输入状态容器（engine/input）
     tankcity_shared   # 读 assets/config：数值只允许有一处来源，客户端不另留副本
 )
 
