@@ -60,7 +60,8 @@ bool Game::resolvePlayerStats(tankcity::config::TankStats &stats)
     }
 }
 
-bool Game::resolveCurrentEnemyStats(tankcity::config::TankStats &stats)
+bool Game::resolveCurrentEnemyStats(tankcity::config::TankStats &stats,
+                                    tankcity::config::AiDef &ai)
 {
     if (!ensureConfig()) return false;
 
@@ -74,8 +75,10 @@ bool Game::resolveCurrentEnemyStats(tankcity::config::TankStats &stats)
     }
 
     try {
-        stats = tankcity::config::resolveEnemyStats(m_config,
-                                                   m_config.difficulties.at(currentDifficulty));
+        const tankcity::config::DifficultyDef &difficulty =
+            m_config.difficulties.at(currentDifficulty);
+        stats = tankcity::config::resolveEnemyStats(m_config, difficulty);
+        ai = difficulty.ai;
         return true;
     } catch (const tankcity::config::ConfigError &e) {
         qCritical() << "敌人数值解析失败：" << e.what();
@@ -726,12 +729,13 @@ void Game::spawnEnemy()
     }
     
     tankcity::config::TankStats stats;
-    if (!resolveCurrentEnemyStats(stats)) {
+    tankcity::config::AiDef ai;
+    if (!resolveCurrentEnemyStats(stats, ai)) {
         qCritical() << "敌人数值不可用，放弃生成敌人";
         return;
     }
 
-    auto enemy = std::make_shared<Enemy>(gameMap, QPoint(x, y), currentDifficulty, stats);
+    auto enemy = std::make_shared<Enemy>(gameMap, QPoint(x, y), currentDifficulty, stats, ai);
     enemies.append(enemy);
     
     // 广播新敌人

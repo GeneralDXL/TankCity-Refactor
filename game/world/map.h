@@ -73,6 +73,14 @@ public:
 
     const QVector<Wall> &getWalls() const { return world_.getWalls(); }
 
+    /**
+     * 几何层的只读引用。
+     *
+     * 给「按 World 工作」的地方用 —— 目前是 `PathFinder`（A\* 跑在网格上）。
+     * 实体签名迁到 `World*` 之前，这是 `Map*` 持有者取到几何层的通路。
+     */
+    const World &world() const { return world_; }
+
     // --- 规则：只有这一条不属于几何 ---
 
     /// 子弹碰撞：返回 true 表示子弹命中并应当消失。

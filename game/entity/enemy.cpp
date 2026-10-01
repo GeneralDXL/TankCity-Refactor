@@ -1,17 +1,16 @@
 #include "enemy.h"
+#include "pathfinder.h"   // A* 已搬进 game/world（M3 步 4）
 #include <QtMath>
-#include <queue>
 #include <cmath>
 #include <QRandomGenerator>
 #include <QRectF>
-#include <queue>
-#include <set>
 
 int Enemy::ID = 0;
 
 
 Enemy::Enemy(Map *gameMap, const QPoint &position, int difficulty,
-             const tankcity::config::TankStats &stats)
+             const tankcity::config::TankStats &stats,
+             const tankcity::config::AiDef &ai)
     : Tank(gameMap, stats),       // 调用基类构造函数
     difficulty(difficulty)         // 初始化派生类成员
 {
@@ -20,6 +19,10 @@ Enemy::Enemy(Map *gameMap, const QPoint &position, int difficulty,
     moveTimer = 0;
     changeDirectionTimer = 0;
     shootTimer = 0;
+
+    // AI 节奏来自 difficulty.json 的 ai 段（M3 步 4 接线；此前写死在头文件里）
+    repathIntervalTicks = ai.repathIntervalTicks;
+    stuckThresholdTicks = ai.stuckThresholdTicks;
 
     // 速度 / 射击间隔 / 血量一律来自 difficulty.json 的对应档位（含 overrides），
     // 见 tankcity::config::resolveEnemyStats()；难度号只作为标识保留（协议与贴图要用）。
@@ -67,218 +70,23 @@ bool Enemy::isSafePosition(const QPoint& worldPos) const {
 }
 
 
-// A*寻路节点结构
-struct Node {
-    QPoint gridPos;
-    int g; // 从起点到当前节点的代价
-    int h; // 从当前节点到目标的预估代价
-    Node* parent;
-
-    Node(QPoint pos, int gCost, int hCost, Node* p = nullptr)
-        : gridPos(pos), g(gCost), h(hCost), parent(p) {}
-
-    int f() const { return g + h; }
-
-    // 用于优先队列的比较
-    bool operator>(const Node& other) const {
-        return f() > other.f();
-    }
-};
-
-struct QPointCompare {
-    bool operator()(const QPoint& a, const QPoint& b) const {
-        if (a.x() != b.x()) return a.x() < b.x();
-        return a.y() < b.y();
-    }
-};
-
 void Enemy::calculatePath(const QPoint& playerGridPos)
 {
     path.clear();
     currentPathIndex = -1;
 
-    if (!gameMap) return;
-
-    QPoint startGrid = gameMap->worldToGrid(position);
-    QPoint targetGrid = playerGridPos;
-
-    // 如果起点或终点不可通行，尝试寻找最近的可行点
-    if (!gameMap->isCellWalkable(startGrid.x(), startGrid.y())) {
-        // 寻找最近的可行点
-        for (int r = 1; r <= 5; r++) {
-            for (int dx = -r; dx <= r; dx++) {
-                for (int dy = -r; dy <= r; dy++) {
-                    QPoint testPoint(startGrid.x() + dx, startGrid.y() + dy);
-                    if (gameMap->isCellWalkable(testPoint.x(), testPoint.y())) {
-                        startGrid = testPoint;
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    if (!gameMap->isCellWalkable(targetGrid.x(), targetGrid.y())) {
-        // 寻找最近的可行点
-        for (int r = 1; r <= 5; r++) {
-            for (int dx = -r; dx <= r; dx++) {
-                for (int dy = -r; dy <= r; dy++) {
-                    QPoint testPoint(targetGrid.x() + dx, targetGrid.y() + dy);
-                    if (gameMap->isCellWalkable(testPoint.x(), testPoint.y())) {
-                        targetGrid = testPoint;
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    // 如果已经在目标位置
-    if (startGrid == targetGrid) {
-        path.append(targetGrid);
-        currentPathIndex = 0;
+    if (!gameMap)
         return;
-    }
 
-    // 定义优先队列（最小堆）
-    auto cmp = [](const Node* a, const Node* b) {
-        if (a->f() == b->f()) return a->h > b->h;
-        return a->f() > b->f();
-    };
-    std::priority_queue<Node*, std::vector<Node*>, decltype(cmp)> openSet(cmp);
-    std::set<QPoint, QPointCompare> closedSet;
-    std::unordered_map<int, Node*> allNodes;
+    // 路径由 world 层的 PathFinder 求（M3 步 4：A* 从本类搬进 game/world）。
+    // 本函数只负责"把结果存下来" —— 起点/终点的吸附、斜穿取舍、路径平滑
+    // 都在 PathFinder 里（见 game/world/pathfinder.h）。
+    path = PathFinder::findPath(gameMap->world(),
+                                gameMap->worldToGrid(position),
+                                playerGridPos);
 
-    // 起点节点
-    int startKey = startGrid.x() * 10000 + startGrid.y();
-    Node* startNode = new Node(startGrid, 0,
-                               abs(startGrid.x() - targetGrid.x()) + abs(startGrid.y() - targetGrid.y()));
-    openSet.push(startNode);
-    allNodes[startKey] = startNode;
-
-    // 八方向移动的偏移量
-    const QPoint directions[] = {
-        QPoint(0, -1),  // 上
-        QPoint(1, 0),   // 右
-        QPoint(0, 1),   // 下
-        QPoint(-1, 0),  // 左
-        QPoint(-1, -1), // 左上
-        QPoint(1, -1),  // 右上
-        QPoint(1, 1),   // 右下
-        QPoint(-1, 1)   // 左下
-    };
-
-    Node* targetNode = nullptr;
-
-    while (!openSet.empty()) {
-        Node* currentNode = openSet.top();
-        openSet.pop();
-
-        // 如果找到目标
-        if (currentNode->gridPos == targetGrid) {
-            targetNode = currentNode;
-            break;
-        }
-
-        closedSet.insert(currentNode->gridPos);
-
-        // 检查所有方向
-        for (const auto& dir : directions) {
-            QPoint neighborPos = currentNode->gridPos + dir;
-
-            // 检查邻居是否在网格范围内。
-            // 边界一律取自地图自身的格数：这里以前写着 30 与 22.5，
-            // 后者正是「900 / 40」的非整数格高被抄进死代码的结果。
-            if (neighborPos.x() < 0 || neighborPos.y() < 0 ||
-                neighborPos.x() >= gameMap->getGridWidth() ||
-                neighborPos.y() >= gameMap->getGridHeight()) {
-                continue;
-            }
-
-            // 检查邻居是否已在关闭列表
-            if (closedSet.find(neighborPos) != closedSet.end()) {
-                continue;
-            }
-
-            // 检查邻居是否可通行
-            if (!gameMap->isCellWalkable(neighborPos.x(), neighborPos.y())) {
-                continue;
-            }
-
-            // 计算移动代价（对角线移动代价稍高）
-            int moveCost = (abs(dir.x()) + abs(dir.y()) == 2 ? 14 : 10);
-            int newG = currentNode->g + moveCost;
-            int newH = abs(neighborPos.x() - targetGrid.x()) +
-                       abs(neighborPos.y() - targetGrid.y());
-
-            // 检查邻居是否已在开放列表中
-            int neighborKey = neighborPos.x() * 10000 + neighborPos.y();
-            Node* neighborNode = nullptr;
-            if (allNodes.find(neighborKey) != allNodes.end()) {
-                neighborNode = allNodes[neighborKey];
-            }
-
-            // 如果不在开放列表或找到更短路径
-            if (!neighborNode || newG < neighborNode->g) {
-                if (!neighborNode) {
-                    neighborNode = new Node(neighborPos, newG, newH, currentNode);
-                    openSet.push(neighborNode);
-                    allNodes[neighborKey] = neighborNode;
-                } else {
-                    neighborNode->g = newG;
-                    neighborNode->parent = currentNode;
-                    // 需要重新加入优先队列以更新位置
-                    openSet.push(neighborNode);
-                }
-            }
-        }
-    }
-
-    // 如果找到路径，回溯并存储
-    if (targetNode) {
-        Node* node = targetNode;
-        while (node) {
-            path.prepend(node->gridPos);
-            node = node->parent;
-        }
-
-        // 删除起点（已经是当前位置）
-        if (path.size() > 1) {
-            path.removeFirst();
-        }
-
+    if (!path.isEmpty())
         currentPathIndex = 0;
-    }
-
-    // 清理内存
-    for (auto& pair : allNodes) {
-        delete pair.second;
-    }
-
-    // 路径平滑处理 - 简化路径
-    if (path.size() > 2) {
-        QVector<QPoint> simplifiedPath;
-        simplifiedPath.append(path.first());
-
-        int lastValidIndex = 0;
-        for (int i = 1; i < path.size() - 1; i++) {
-            // 检查直线是否畅通
-            if (!gameMap->isLineWalkable(simplifiedPath.last(), path[i+1])) {
-                // 添加一个中间点避免直线障碍
-                if (i - lastValidIndex > 1) {
-                    QPoint midPoint = (simplifiedPath.last() + path[i]) / 2;
-                    if (gameMap->isCellWalkable(midPoint.x(), midPoint.y())) {
-                        simplifiedPath.append(midPoint);
-                    }
-                }
-                simplifiedPath.append(path[i]);
-                lastValidIndex = i;
-            }
-        }
-        simplifiedPath.append(path.last());
-
-        path = simplifiedPath;
-    }
 }
 
 float Enemy::calculateObstacleDistance(const QPoint& pos, Map* map) const
@@ -325,8 +133,8 @@ void Enemy::update(const QPoint &playerPos, Map *map)
 
     // 更新路径重新计算计时器
     recalculatePathTimer--;
-    if (recalculatePathTimer <= 0 || path.isEmpty() || stuckTimer > MAX_STUCK_TIME) {
-        recalculatePathTimer = RECALCULATE_PATH_INTERVAL;
+    if (recalculatePathTimer <= 0 || path.isEmpty() || stuckTimer > stuckThresholdTicks) {
+        recalculatePathTimer = repathIntervalTicks;
         stuckTimer = 0;
         calculatePath(map->worldToGrid(playerPos));
     }
@@ -417,7 +225,7 @@ void Enemy::update(const QPoint &playerPos, Map *map)
                 } else {
                     stuckTimer++;
                     // 如果卡住时间过长，重新计算路径
-                    if (stuckTimer > MAX_STUCK_TIME/2) {
+                    if (stuckTimer > stuckThresholdTicks/2) {
                         recalculatePathTimer = 0;
                     }
                 }
