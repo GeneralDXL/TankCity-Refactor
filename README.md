@@ -119,13 +119,13 @@ ctest --test-dir build --output-on-failure   # 运行单元测试
 
 | 成员 | 负责 |
 |---|---|
-| 段绪礼 (GeneralDXL) | 后端类设计、客户端 GUI 与贴图 |
-| 张昶宇 (todayair) | 核心玩法、DevOps / CI、测试 |
-| 周梓欣 (zzxzdzx) | 敌人 AI（A\*）、关卡、双人模式、文档 |
-| 赵天星 (x1a0qiya) | TCP Socket 网络通信 |
-| 李志豪 (lzh) | 参与开发 |
+| GeneralDXL | 后端类设计、客户端 GUI 与贴图 |
+| todayair | 核心玩法、DevOps / CI、测试 |
+| zzxzdzx | 敌人 AI（A\*）、关卡、双人模式、文档 |
+| x1a0qiya | TCP Socket 网络通信 |
+| lzh | 参与开发 |
 
-**2026 · 重构**：段绪礼 (GeneralDXL) 主导。
+**2026 · 重构**：GeneralDXL 主导。
 
 ---
 
