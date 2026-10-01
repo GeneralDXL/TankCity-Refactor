@@ -38,6 +38,7 @@ target_link_libraries(tankcity_client PRIVATE
     tankcity_engine_core     # kTickMs：全仓库唯一的「一帧」定义
     tankcity_engine_render   # 地图绘制原语与贴图缓存（engine/render）
     tankcity_engine_input    # 输入状态容器（engine/input）
+    tankcity_engine_asset    # 资源定位：按可执行文件而非工作目录（engine/asset）
     tankcity_shared   # 读 assets/config：数值只允许有一处来源，客户端不另留副本
 )
 

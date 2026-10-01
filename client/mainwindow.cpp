@@ -1,4 +1,5 @@
 #include "mainwindow.h"
+#include "asset/AssetPaths.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QMessageBox>
@@ -41,7 +42,7 @@ int selectedMapIndex(const QComboBox *combo)
 MainWindow::MainWindow(const QString &username, QWidget *parent)
     : QMainWindow(parent), currentUsername(username)
 {
-    backgroundImage.load("./../../assets/images/ui/theme.png");
+    backgroundImage.load(engine::asset::assetPath("images/ui/theme.png"));
     if (backgroundImage.isNull()) {
         qWarning() << "Failed to load background image";
         setStyleSheet("background-color: #2c3e50; color: #ecf0f1;");  // 回退样式
@@ -94,7 +95,7 @@ void MainWindow::setupMainMenu()
     layout->setSpacing(30);
 
     QLabel *titleLabel = new QLabel(mainMenuWidget);
-    QPixmap titlePixmap("./../../assets/images/ui/title.png");
+    QPixmap titlePixmap(engine::asset::assetPath("images/ui/title.png"));
     if(!titlePixmap.isNull())
     {
         titleLabel->setPixmap(titlePixmap.scaledToWidth(600,Qt::SmoothTransformation));
@@ -145,8 +146,8 @@ void MainWindow::setupMainMenu()
 
     const int BUTTON_WIDTH = 300;
 
-    startButton = createImageButton("./../../assets/images/ui/start.png", BUTTON_WIDTH);
-    exitButton = createImageButton("./../../assets/images/ui/exit.png", BUTTON_WIDTH);
+    startButton = createImageButton(engine::asset::assetPath("images/ui/start.png"), BUTTON_WIDTH);
+    exitButton = createImageButton(engine::asset::assetPath("images/ui/exit.png"), BUTTON_WIDTH);
 
 
     layout->addWidget(titleLabel,0,Qt::AlignCenter);
@@ -213,23 +214,23 @@ void MainWindow::setupModeSelect()
     };
 
     QLabel *titleLabel = new QLabel(modeSelectWidget);
-    QPixmap scoreboardPixmap("./../../assets/images/ui/select.png");
+    QPixmap scoreboardPixmap(engine::asset::assetPath("images/ui/select.png"));
     titleLabel->setPixmap(scoreboardPixmap.scaledToWidth(400, Qt::SmoothTransformation));
     titleLabel->setAlignment(Qt::AlignCenter);
 
     const int BUTTON_WIDTH=250;
 
     // 单人闯关模式按钮
-    singlePlayerButton = createImageButton("./../../assets/images/ui/single_lim.png", BUTTON_WIDTH);
+    singlePlayerButton = createImageButton(engine::asset::assetPath("images/ui/single_lim.png"), BUTTON_WIDTH);
 
     // 单人无尽模式按钮
-    endlessModeButton = createImageButton("./../../assets/images/ui/single_inf.png", BUTTON_WIDTH);
+    endlessModeButton = createImageButton(engine::asset::assetPath("images/ui/single_inf.png"), BUTTON_WIDTH);
 
     // 双人联机对战按钮
-    multiplayerButton = createImageButton("./../../assets/images/ui/multi.png", BUTTON_WIDTH);
+    multiplayerButton = createImageButton(engine::asset::assetPath("images/ui/multi.png"), BUTTON_WIDTH);
 
     // 返回主菜单按钮
-    backToMenuButton = createImageButton("./../../assets/images/ui/return.png", 150);
+    backToMenuButton = createImageButton(engine::asset::assetPath("images/ui/return.png"), 150);
 
     layout->addWidget(titleLabel,0,Qt::AlignCenter);
     layout->addWidget(singlePlayerButton,0,Qt::AlignCenter);
@@ -252,7 +253,7 @@ void MainWindow::setupGameSetup()
     layout->setSpacing(30);
 
     QLabel *titleLabel = new QLabel(gameSetupWidget);
-    QPixmap setupPixmap("./../../assets/images/ui/setting.png");
+    QPixmap setupPixmap(engine::asset::assetPath("images/ui/setting.png"));
     if(!setupPixmap.isNull()) {
         titleLabel->setPixmap(setupPixmap.scaledToWidth(300, Qt::SmoothTransformation));
         titleLabel->setAlignment(Qt::AlignCenter);
@@ -318,9 +319,9 @@ void MainWindow::setupGameSetup()
 
     QHBoxLayout *buttonLayout = new QHBoxLayout();
 
-    startGameButton = createSetupButton("./../../assets/images/ui/start.png", SETUP_BUTTON_WIDTH);
-    backToMenuButton = createSetupButton("./../../assets/images/ui/return.png", SETUP_BUTTON_WIDTH);
-    scoreBoardButton = createSetupButton("./../../assets/images/ui/row.png", SETUP_BUTTON_WIDTH);
+    startGameButton = createSetupButton(engine::asset::assetPath("images/ui/start.png"), SETUP_BUTTON_WIDTH);
+    backToMenuButton = createSetupButton(engine::asset::assetPath("images/ui/return.png"), SETUP_BUTTON_WIDTH);
+    scoreBoardButton = createSetupButton(engine::asset::assetPath("images/ui/row.png"), SETUP_BUTTON_WIDTH);
 
     buttonLayout->addWidget(startGameButton);
     buttonLayout->addWidget(scoreBoardButton);
@@ -351,7 +352,7 @@ void MainWindow::setupEndlessGameSetup()
     layout->setSpacing(30);
 
     QLabel *titleLabel = new QLabel(endlessGameSetupWidget);
-    QPixmap setupPixmap("./../../assets/images/ui/setting.png");
+    QPixmap setupPixmap(engine::asset::assetPath("images/ui/setting.png"));
     if(!setupPixmap.isNull()) {
         titleLabel->setPixmap(setupPixmap.scaledToWidth(300, Qt::SmoothTransformation));
         titleLabel->setAlignment(Qt::AlignCenter);
@@ -417,9 +418,9 @@ void MainWindow::setupEndlessGameSetup()
 
     QHBoxLayout *buttonLayout = new QHBoxLayout();
 
-    endlessStartGameButton = createSetupButton("./../../assets/images/ui/start.png", SETUP_BUTTON_WIDTH);
-    backToMenuButton = createSetupButton("./../../assets/images/ui/return.png", SETUP_BUTTON_WIDTH);
-    endlessScoreBoardButton = createSetupButton("./../../assets/images/ui/row.png", SETUP_BUTTON_WIDTH);
+    endlessStartGameButton = createSetupButton(engine::asset::assetPath("images/ui/start.png"), SETUP_BUTTON_WIDTH);
+    backToMenuButton = createSetupButton(engine::asset::assetPath("images/ui/return.png"), SETUP_BUTTON_WIDTH);
+    endlessScoreBoardButton = createSetupButton(engine::asset::assetPath("images/ui/row.png"), SETUP_BUTTON_WIDTH);
 
     buttonLayout->addWidget(endlessStartGameButton);
     buttonLayout->addWidget(endlessScoreBoardButton);
@@ -450,7 +451,7 @@ void MainWindow::setupMultiplayerSetup()
     layout->setSpacing(30);
 
     QLabel *titleLabel = new QLabel(multiplayerSetupWidget);
-    QPixmap scoreboardPixmap("./../../assets/images/ui/multi.png");
+    QPixmap scoreboardPixmap(engine::asset::assetPath("images/ui/multi.png"));
     titleLabel->setPixmap(scoreboardPixmap.scaledToWidth(400, Qt::SmoothTransformation));
     titleLabel->setAlignment(Qt::AlignCenter);
 
@@ -507,10 +508,10 @@ void MainWindow::setupMultiplayerSetup()
 
     const int BUTTON_WIDTH=200;
 
-    startMultiplayerButton = createImageButton("./../../assets/images/ui/start.png", BUTTON_WIDTH);
+    startMultiplayerButton = createImageButton(engine::asset::assetPath("images/ui/start.png"), BUTTON_WIDTH);
 
     // 返回按钮
-    QPushButton *backToMenuButton = createImageButton("./../../assets/images/ui/return.png", BUTTON_WIDTH);
+    QPushButton *backToMenuButton = createImageButton(engine::asset::assetPath("images/ui/return.png"), BUTTON_WIDTH);
 
     QHBoxLayout *buttonLayout = new QHBoxLayout();
     buttonLayout->addWidget(startMultiplayerButton);

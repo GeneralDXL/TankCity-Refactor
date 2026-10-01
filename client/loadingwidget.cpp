@@ -1,4 +1,5 @@
 #include "loadingwidget.h"
+#include "asset/AssetPaths.h"
 #include <QVBoxLayout>
 #include <QPainter>
 #include <QFileInfo>
@@ -17,7 +18,7 @@ LoadingWidget::LoadingWidget(QWidget *parent)
     setFixedSize(1450, 800); // 固定窗口大小
 
     // 尝试加载外部图片
-    QString imagePath = "./../../assets/images/ui/theme.png";
+    QString imagePath = engine::asset::assetPath("images/ui/theme.png");
     if (QFileInfo::exists(imagePath)) {
         if (!backgroundImage.load(imagePath)) {
             qWarning() << "Failed to load image from:" << imagePath;
@@ -27,9 +28,9 @@ LoadingWidget::LoadingWidget(QWidget *parent)
     }
 
     // 进度条设置
-    QPixmap bulletPix("./../../assets/images/ui/bullet.png");
-    QPixmap tankPix("./../../assets/images/ui/tank.png");
-    QPixmap framePix("./../../assets/images/ui/framework.png");
+    QPixmap bulletPix(engine::asset::assetPath("images/ui/bullet.png"));
+    QPixmap tankPix(engine::asset::assetPath("images/ui/tank.png"));
+    QPixmap framePix(engine::asset::assetPath("images/ui/framework.png"));
 
     progressContainer=new QWidget(this);
     progressContainer->setFixedSize(1400,60);
@@ -135,7 +136,7 @@ void LoadingWidget::updateProgress()
 
     tankLabel->move(tankX, tankY);
 
-    QPixmap bulletPix("./../../assets/images/ui/bullet.png");
+    QPixmap bulletPix(engine::asset::assetPath("images/ui/bullet.png"));
     bulletPix = bulletPix.scaled(
         10,
         bulletContainer->height()*0.8,

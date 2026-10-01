@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QTimer>
 #include <QTcpSocket>
+#include "asset/AssetPaths.h"
 #include "input/InputTracker.h"
 #include "net/MessageFramer.h"
 #include "render/painter.h"
@@ -67,9 +68,8 @@ private:
     QMap<int, std::shared_ptr<PlayerPainter>> players;
 
     /// 地图贴图缓存（每个文件只加载一次）。
-    /// 资源根目录仍是相对当前工作目录 —— 与搬迁前完全一致（客户端必须在 build/bin 下启动），
-    /// M1.1 后面的 engine/asset 会把它改成按可执行文件定位。
-    engine::render::TextureCache textureCache_{QStringLiteral("./../../assets")};
+    /// 资源根由 engine/asset 按**可执行文件目录**解析 —— 从任何工作目录启动都能找到 assets/。
+    engine::render::TextureCache textureCache_{engine::asset::assetRoot()};
     QList<std::shared_ptr<EnemyPainter>> enemies;
     std::vector<std::shared_ptr<BulletPainter>> bullets;
 

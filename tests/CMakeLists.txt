@@ -24,6 +24,7 @@ add_executable(tankcity_tests
     client_render_test.cpp
     engine_input_test.cpp
     client_net_test.cpp
+    engine_asset_test.cpp
     # 分帧器也编进测试目标（与 painter.cpp 同理）
     ${CMAKE_SOURCE_DIR}/client/net/MessageFramer.cpp
     ${CMAKE_SOURCE_DIR}/client/net/MessageParser.cpp
@@ -55,6 +56,7 @@ target_link_libraries(tankcity_tests PRIVATE
     tankcity_engine_physics   # 几何与碰撞查询：engine_physics_test 直接测它
     tankcity_engine_render    # 绘制原语与贴图缓存：client_render_test 用它做假渲染器
     tankcity_engine_input     # 输入状态容器：engine_input_test 直接测它
+    tankcity_engine_asset     # 资源定位：engine_asset_test 直接测它
     GTest::gtest_main
 )
 

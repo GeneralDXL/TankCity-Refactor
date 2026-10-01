@@ -1,4 +1,5 @@
 #include "loginwindow.h"
+#include "asset/AssetPaths.h"
 #include "mainwindow.h"
 #include <QDir>
 #include <QDebug>
@@ -11,7 +12,7 @@ QString LoginWindow::accountsFilePath = "data/accounts.txt";
 LoginWindow::LoginWindow(QWidget *parent)
     : QWidget(parent)
 {
-    backgroundImage.load("./../../assets/images/ui/login.png");
+    backgroundImage.load(engine::asset::assetPath("images/ui/login.png"));
     if (backgroundImage.isNull()) {
         qDebug() << "Failed to load background image";
         setStyleSheet("background-color: #2c3e50; color: #ecf0f1;");  // 回退样式
@@ -79,8 +80,8 @@ LoginWindow::LoginWindow(QWidget *parent)
     passwordEdit->setStyleSheet("padding: 8px; border-radius: 5px; background-color: #34495e; color: #ecf0f1;");
 
     QHBoxLayout *buttonLayout = new QHBoxLayout();
-    loginButton = createImageButton("./../../assets/images/ui/sign_in.png", BUTTON_WIDTH);
-    registerButton = createImageButton("./../../assets/images/ui/sign_up.png", BUTTON_WIDTH);
+    loginButton = createImageButton(engine::asset::assetPath("images/ui/sign_in.png"), BUTTON_WIDTH);
+    registerButton = createImageButton(engine::asset::assetPath("images/ui/sign_up.png"), BUTTON_WIDTH);
 
     buttonLayout->addWidget(loginButton);
     buttonLayout->addWidget(registerButton);

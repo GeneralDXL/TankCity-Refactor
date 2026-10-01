@@ -15,6 +15,7 @@ target_link_libraries(tankcity_server PRIVATE
     Qt6::Core
     Qt6::Network
     tankcity_engine_core   # 固定步长逻辑循环（引擎层）
+    tankcity_engine_asset  # 资源定位：按可执行文件而非工作目录（engine/asset）
     tankcity_game     # 实体与世界（M1.1 从 server/ 提升为独立层）
     tankcity_shared   # 关卡/配置模型：assets/levels/*.json 的加载器（由 game 传递依赖）
 )

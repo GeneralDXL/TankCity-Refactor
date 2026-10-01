@@ -8,15 +8,16 @@
 #include <QRandomGenerator>
 #include <QDateTime>
 #include <QTimer>   // 道具时效与结算延时用的是 QTimer::singleShot（走真实时间，与帧无关）
+#include "asset/AssetPaths.h"
 #include "server.h"
 
 namespace {
 
-/// 资产根目录：<exe 所在目录>/../../assets（exe 在 build/bin，仓库根在两级之上）。
-/// 用 applicationDirPath 而非相对当前目录，避免服务端被从仓库根启动时找不到资产。
+/// 资产根目录：统一交给 engine/asset —— 按**可执行文件所在目录**定位，不看工作目录。
+/// （本函数过去手写 applicationDirPath()/../../assets，现在客户端也走同一处。）
 QString assetsRoot()
 {
-    return QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("../../assets"));
+    return engine::asset::assetRoot();
 }
 
 /**
