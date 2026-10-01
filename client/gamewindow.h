@@ -67,7 +67,6 @@ private:
     int score;
     int currentDifficulty;
     int currentMapIndex;
-    int enemySpawnTimer;
 
     // 道具相关
     QList<std::shared_ptr<Item>> items;

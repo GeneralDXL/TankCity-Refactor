@@ -6,9 +6,6 @@ qt_add_executable(tankcity_client
     main.cpp
     clientconfig.cpp
     clientconfig.h
-    widget.cpp
-    widget.h
-    widget.ui
     loginwindow.cpp
     loginwindow.h
     mainwindow.cpp

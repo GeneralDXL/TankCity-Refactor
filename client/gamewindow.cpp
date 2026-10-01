@@ -50,7 +50,6 @@ GameWindow::GameWindow(QWidget *parent) : QWidget(parent)
 
     // 设置默认值
     score = 0;
-    enemySpawnTimer = 0;
     gameRunning = false;
     gamePaused = false;
 
@@ -350,7 +349,6 @@ void GameWindow::onReadyRead()
             bullets.clear(); // 智能指针会自动释放内存
             items.clear();
             score = 0;
-            enemySpawnTimer = 0;
             gameRunning = true;
             gamePaused = false;
             gameTimer->start(16); // 每秒60帧
