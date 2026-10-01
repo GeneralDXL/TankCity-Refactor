@@ -3,8 +3,15 @@
 #include <QDebug>
 #include <QJsonObject>
 
+#include "physics/Aabb.h"
+
 // 注：旧 map.cpp 里的 <QRandomGenerator> / <QJsonDocument> 从头到尾只出现在 include 行，
 // 关卡几何完全由写死的表达式算出（已由 level_test.cpp 对照冻结快照验证），故一并清掉。
+//
+// M1.1：几何查询（相交、格点换算、走线）已移交 engine/physics：
+//   - 遍历与筛选交给 physics/CollisionWorld（它只认位标记，不认「坦克/子弹」）；
+//   - 扣血、销毁、广播这些**判定**仍留在本文件 —— 那是游戏规则。
+// 每个查询的筛选条件都刻意与旧实现逐条对应（含顺序），容易看错的几处都写了注释。
 
 namespace {
 
@@ -52,6 +59,7 @@ bool Map::loadLevel(const tankcity::config::LevelData &level,
         qCritical() << "关卡" << level.id << "的世界尺寸" << level.worldWidth << "x"
                     << level.worldHeight << "与引擎写死的" << MAP_WIDTH << "x" << MAP_HEIGHT
                     << "不一致，无法装载";
+        rebuildCollisionWorld();
         return false;
     }
 
@@ -66,148 +74,182 @@ bool Map::loadLevel(const tankcity::config::LevelData &level,
         if (type < 0) {
             qCritical() << "关卡" << level.id << "使用了 Wall 无法表达的物块 id：" << lr.block;
             walls.clear();
+            rebuildCollisionWorld();
             return false;
         }
         const tankcity::config::BlockDef *def = config.block(lr.block);
         if (def == nullptr) {
             qCritical() << "关卡" << level.id << "引用了 blocks.json 中不存在的物块：" << lr.block;
             walls.clear();
+            rebuildCollisionWorld();
             return false;
         }
         walls.append(Wall(lr.rect.x(), lr.rect.y(), lr.rect.width(), lr.rect.height(), type, *def));
     }
 
+    rebuildCollisionWorld();
     return true;
+}
+
+engine::physics::CollisionWorld::Flags Map::flagsOf(const Wall &wall)
+{
+    engine::physics::CollisionWorld::Flags flags = 0;
+    if (wall.isBlockingTank())
+        flags |= kBlocksMove;
+    if (wall.isBlockingBullet())
+        flags |= kBlocksShot;
+    return flags;
+}
+
+void Map::rebuildCollisionWorld()
+{
+    world_.clear();
+    for (const Wall &wall : walls) {
+        const engine::physics::CollisionWorld::Flags flags = flagsOf(wall);
+        if (flags == 0)
+            continue;   // 既挡不了移动也挡不了投射物（如森林），无需进碰撞世界
+        world_.add(wall.getId(), engine::physics::Aabb::fromRect(wall.getRect()), flags);
+    }
+}
+
+const Wall *Map::wallById(int wallId) const
+{
+    for (const Wall &wall : walls) {
+        if (wall.getId() == wallId)
+            return &wall;
+    }
+    return nullptr;
+}
+
+Wall *Map::mutableWallById(int wallId)
+{
+    for (Wall &wall : walls) {
+        if (wall.getId() == wallId)
+            return &wall;
+    }
+    return nullptr;
+}
+
+bool Map::removeWallById(int wallId)
+{
+    for (int i = 0; i < walls.size(); ++i) {
+        if (walls.at(i).getId() == wallId) {
+            walls.removeAt(i);
+            world_.remove(wallId);   // 几何副本同步移除
+            return true;
+        }
+    }
+    return false;
 }
 
 bool Map::checkCollision(const QRect &rect) const
 {
-    for (const Wall &wall : walls) {
-        // 是否挡坦克由 blocks.json 的 blocksTank 决定（森林、冰块为 false）
-        if (!wall.isBlockingTank()) {
-            continue;
+    bool blocked = false;
+    world_.forEachOverlap(engine::physics::Aabb::fromRect(rect), kBlocksMove,
+                          [this, &blocked](const engine::physics::CollisionWorld::Body &body) {
+        // 是否挡坦克由 blocks.json 的 blocksTank 决定（森林、冰块为 false）——
+        // 那一条已在标记里筛掉，这里只有「被打掉之后不再阻挡」这一条状态判据。
+        const Wall *wall = wallById(body.id);
+        if (wall != nullptr && wall->isDestructible() && wall->getHealth() <= 0) {
+            return true;   // 跳过，继续看下一个
         }
-
-        // 已经被打掉的砖墙不再阻挡
-        if (wall.isDestructible() && wall.getHealth() <= 0) {
-            continue;
-        }
-
-        if (rect.intersects(wall.getRect())) {
-            return true;
-        }
-    }
-    return false;
+        blocked = true;
+        return false;      // 首个命中即返回
+    });
+    return blocked;
 }
 
 bool Map::checkBulletCollision(const QRect &rect, int damage)
 {
-    for (Wall &wall : walls) {
+    int hitWallId = 0;
+    bool hit = false;
+
+    world_.forEachOverlap(engine::physics::Aabb::fromRect(rect), kBlocksShot,
+                          [&hitWallId, &hit](const engine::physics::CollisionWorld::Body &body) {
         // 是否挡子弹由 blocks.json 的 blocksBullet 决定
         // （旧代码跳过森林/海洋/冰块，正是这三者为 false；边界与砖钢为 true）
-        if (!wall.isBlockingBullet()) {
-            continue;
-        }
+        hitWallId = body.id;
+        hit = true;
+        return false;      // 首个命中即返回
+    });
 
-        if (rect.intersects(wall.getRect())) {
-            if(wall.isDestructible()){
-                wall.setHealth(wall.getHealth() - damage);
-            }
-            if(wall.isDestructible() && wall.getHealth() <= 0)
-            {
-                QJsonObject json;
-                json["type"]="delete_wall";
-                json["wallId"]=wall.getId();
-                emit broadcastMessage(json);
-                walls.removeOne(wall);
-            }
-            return true;
-        }
+    if (!hit)
+        return false;
+
+    Wall *wall = mutableWallById(hitWallId);
+    if (wall == nullptr)
+        return false;
+
+    if (wall->isDestructible()) {
+        wall->setHealth(wall->getHealth() - damage);
     }
-    return false;
+
+    if (wall->isDestructible() && wall->getHealth() <= 0) {
+        // 先取 id 再移除：removeWallById 之后 wall 指针已失效
+        const int deadWallId = wall->getId();
+
+        QJsonObject json;
+        json["type"] = "delete_wall";
+        json["wallId"] = deadWallId;
+        emit broadcastMessage(json);
+
+        removeWallById(deadWallId);
+    }
+    return true;
 }
 
 int Map::checkTankCollision(const QRect &rect, const Tank *tank) const
 {
-    for (const Wall &wall : walls) {
+    Q_UNUSED(tank);   // 旧签名保留：M3 可能按体型区分，目前判定与调用方无关
+
+    int wallType = -1;
+    world_.forEachOverlap(engine::physics::Aabb::fromRect(rect), kBlocksMove,
+                          [this, &wallType](const engine::physics::CollisionWorld::Body &body) {
         // 是否挡坦克由 blocks.json 的 blocksTank 决定（森林、冰块为 false）。
         // 旧代码把海洋单列一支，返回的也是 SEA，与这里返回 getType() 等价。
-        if (!wall.isBlockingTank()) {
-            continue;
-        }
-
-        if (rect.intersects(wall.getRect())) {
-            return wall.getType(); // 返回墙的类型
-        }
-    }
-    return -1; // 无碰撞
+        const Wall *wall = wallById(body.id);
+        if (wall == nullptr)
+            return true;
+        wallType = wall->getType(); // 返回墙的类型
+        return false;
+    });
+    return wallType; // -1 表示无碰撞
 }
 
 
 QPoint Map::worldToGrid(const QPoint& worldPos) const {
-    return QPoint(worldPos.x() / 40, worldPos.y() / 40);
+    return grid_.toCell(worldPos);
 }
 
 bool Map::isCellWalkable(int gridX, int gridY) const {
-    int padding = 5;
-    QRect cellRect(
-        gridX * 40 + padding,
-        gridY * 40 + padding,
-        40 - 2 * padding,
-        40 - 2 * padding
-        );
+    // 只由 blocksTank 决定：森林、冰块可穿过，海洋/边界/砖/钢不可（与旧写法一致）。
+    // 这里刻意**不做**血量判据 —— 旧实现也没有，而这条在 A* 内层循环里会被调用成千上万次。
+    bool walkable = true;
+    const QRect cellRect = grid_.cellRect(QPoint(gridX, gridY), kCellPadding);
 
-
-    for (const Wall &wall : walls) {
-        // 只由 blocksTank 决定：森林、冰块可穿过，海洋/边界/砖/钢不可（与旧写法一致）
-        if (!wall.isBlockingTank()) {
-            continue;
-        }
-
-        if (wall.getRect().intersects(cellRect)) {
-            return false;
-        }
-    }
-    return true;
+    world_.forEachOverlap(engine::physics::Aabb::fromRect(cellRect), kBlocksMove,
+                          [&walkable](const engine::physics::CollisionWorld::Body &) {
+        walkable = false;
+        return false;
+    });
+    return walkable;
 }
 
 bool Map::isLineWalkable(const QPoint& start, const QPoint& end) const {
-    QPoint worldStart = gridToWorld(start);
-    QPoint worldEnd = gridToWorld(end);
-
-    // Bresenham算法遍历直线上的点
-    int dx = abs(worldEnd.x() - worldStart.x());
-    int dy = abs(worldEnd.y() - worldStart.y());
-    int sx = (worldStart.x() < worldEnd.x()) ? 1 : -1;
-    int sy = (worldStart.y() < worldEnd.y()) ? 1 : -1;
-    int err = dx - dy;
-
-    QPoint current = worldStart;
-    while (current != worldEnd) {
-        // 检查当前点是否可行
-        if (!isCellWalkable(worldToGrid(current).x(), worldToGrid(current).y())) {
-            return false;
-        }
-
-        int e2 = 2 * err;
-        if (e2 > -dy) {
-            err -= dy;
-            current.rx() += sx;
-        }
-        if (e2 < dx) {
-            err += dx;
-            current.ry() += sy;
-        }
-    }
-    return true;
+    // Bresenham 走线本身已是引擎能力（engine/physics/Grid::walkLine）；
+    // 「一格能不能过」仍是地图的判断，所以以回调注入。
+    return grid_.walkLine(start, end, [this](const QPoint &cell) {
+        return isCellWalkable(cell.x(), cell.y());
+    });
 }
 
 QPoint Map::gridToWorld(const QPoint& gridPos) const {
-    return QPoint(gridPos.x() * 40 + 20, gridPos.y() * 40 + 20);
+    return grid_.toWorld(gridPos);
 }
 
 int Map::getTerrainType(const QPoint &position) const
 {
+    // 地形采样（不是碰撞查询）：按插入顺序取**首个包含该点**的物块，与旧实现同序。
     for (const Wall &wall : walls) {
         if (wall.contains(position)) {
             return wall.getType();

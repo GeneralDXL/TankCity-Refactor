@@ -28,5 +28,6 @@ target_include_directories(tankcity_game PUBLIC
 
 target_link_libraries(tankcity_game PUBLIC
     Qt6::Core
+    tankcity_engine_physics   # 几何查询：相交、格点换算、走线（M1.1 从 Map 里抽出来的）
     tankcity_shared   # 关卡几何与实体数值都来自 assets/*.json
 )

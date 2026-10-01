@@ -20,6 +20,7 @@ add_executable(tankcity_tests
     config_test.cpp
     level_test.cpp
     engine_core_test.cpp
+    engine_physics_test.cpp
 )
 
 # 配置测试需要读取仓库内真实的 assets/config、assets/levels 与旧关卡快照
@@ -36,6 +37,7 @@ target_link_libraries(tankcity_tests PRIVATE
     tankcity_shared
     tankcity_game   # 地图与墙体：改为链接 game 库，不再把源文件重复编一遍
     tankcity_engine_core   # 固定步长循环：engine_core_test 直接测它
+    tankcity_engine_physics   # 几何与碰撞查询：engine_physics_test 直接测它
     GTest::gtest_main
 )
 

@@ -53,18 +53,11 @@ public:
     void setHealth(int h) { health = h; } // 设置生命值
     bool isMovable() const { return !blocksTank; }
     int getId() const { return id; } // 获取墙的唯一ID  
-    void takeDamage(int damage)
-    {
-        if (isDestructible()) {
-            health -= damage;
-            if (health < 0)
-            {
-                health = 0;
-                delete this;
-            }
-        }
-    }
-    
+
+    // 注：这里原本还有一个 takeDamage()，里面写着 `delete this`。
+    // Wall 是 QVector<Wall> 里的**值元素**，一旦有人调用就是未定义行为；
+    // 而它从未被调用过（唯一的伤害路径是 Map::checkBulletCollision 里的 setHealth），
+    // 故于 M1.1 删除。
 };
 
 #endif // WALL_H
