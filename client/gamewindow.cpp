@@ -242,42 +242,32 @@ void GameWindow::drawHud(QPainter &painter)
 void GameWindow::onDisconnected()
 {
     qDebug() << "Disconnected from server";
+
+    // 半条消息不能漏进下一次连接
+    frameBuffer_.clear();
 }
 
 void GameWindow::onReadyRead()
 {
-    while (socket->bytesAvailable()) {
-        // 1. 读取消息长度头
-        QByteArray lengthData = socket->read(sizeof(quint32));
-        if (lengthData.size() != sizeof(quint32)) break;
-        
-        quint32 messageLength = qFromBigEndian<quint32>(reinterpret_cast<const uchar*>(lengthData.constData()));
-        
-        // 2. 等待完整消息到达
-        while (socket->bytesAvailable() < messageLength) {
-            if (!socket->waitForReadyRead(100)) break;
-        }
-        if (socket->bytesAvailable() < messageLength) break;
+    // 分帧交给 client/net：这里只负责「喂字节 → 逐条取消息 → 分发」。
+    // 搬迁前是「读长度头 + waitForReadyRead 阻塞等待」，既会在 GUI 线程上卡最长 100ms，
+    // 又会在等不到正文时把长度头吃掉、导致流错位；两件事都由 MessageFramer 修掉。
+    frameBuffer_.append(socket->readAll());
 
-        QByteArray data = socket->read(messageLength);
-        
-        // 使用QJson处理数据
-        QJsonParseError parseError;
-        QJsonDocument jsonDoc = QJsonDocument::fromJson(data, &parseError);
-        
-        if (parseError.error != QJsonParseError::NoError) {
-            qWarning() << "JSON parse error:" << parseError.errorString();
-            continue;  // 继续处理下一个可用数据
-        }
-        
-        if (!jsonDoc.isObject()) {
-            qWarning() << "Invalid JSON structure, expected object";
+    QJsonObject json;
+    while (true) {
+        switch (frameBuffer_.take(json)) {
+        case client::net::MessageFramer::Status::Ok:
+            break;
+        case client::net::MessageFramer::Status::NeedMoreData:
+            return;   // 剩下的等下一次 readyRead
+        case client::net::MessageFramer::Status::Malformed:
+            qWarning() << "丢弃一条无法解析的消息";
             continue;
         }
-        
-        QJsonObject json = jsonDoc.object();
-        
-        QString type = json["type"].toString();
+
+        // ↓↓ 以下分发与搬迁前逐行一致，只改了「消息是怎么取出来的」 ↓↓
+        const QString type = json["type"].toString();
         if (type == "player_init")
         {
             qDebug() << "Received player tank update\n";

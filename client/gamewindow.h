@@ -5,6 +5,7 @@
 #include <QTimer>
 #include <QTcpSocket>
 #include "input/InputTracker.h"
+#include "net/MessageFramer.h"
 #include "render/painter.h"
 #include "render/TextureCache.h"
 
@@ -54,6 +55,8 @@ private:
     
 
     QTcpSocket *socket;
+    /// 收包分帧缓冲（client/net）：把 TCP 字节流切成一条条完整消息
+    client::net::MessageFramer frameBuffer_;
 
     QTimer *gameTimer;
     MapPainter *gameMap;

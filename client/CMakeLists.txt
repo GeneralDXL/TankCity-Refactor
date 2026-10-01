@@ -18,8 +18,16 @@ qt_add_executable(tankcity_client
     registerwindow.h
     render/painter.cpp
     render/painter.h
+    net/MessageFramer.cpp
+    net/MessageFramer.h
     loadingwidget.cpp
     loadingwidget.h
+)
+
+# client/ 作为头文件根：这样 `#include "net/..."` / `"render/..."` 在子目录里也能用
+# （与 tests 目标保持一致；painter.cpp 内部同目录引用 `"painter.h"` 不受影响）
+target_include_directories(tankcity_client PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 target_link_libraries(tankcity_client PRIVATE

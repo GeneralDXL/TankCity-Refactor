@@ -23,6 +23,9 @@ add_executable(tankcity_tests
     engine_physics_test.cpp
     client_render_test.cpp
     engine_input_test.cpp
+    client_net_test.cpp
+    # 分帧器也编进测试目标（与 painter.cpp 同理）
+    ${CMAKE_SOURCE_DIR}/client/net/MessageFramer.cpp
     # 客户端的地图绘制：编进测试目标，才能用「假渲染器」把绘制调用断言下来。
     # painter.cpp 里还有坦克/敌人等 Painter（链接时需要 QtGui，测试目标已链接 Qt6::Widgets）。
     ${CMAKE_SOURCE_DIR}/client/render/painter.cpp
