@@ -1,4 +1,5 @@
 #include "registerwindow.h"
+#include "asset/AssetPaths.h"
 #include "loginwindow.h"
 #include "mainwindow.h"
 
@@ -7,7 +8,7 @@ RegisterWindow::RegisterWindow(QWidget *parent) : QWidget(parent)
     setWindowTitle("注册");
     setFixedSize(800, 700);
 
-    backgroundImage.load("./../../assets/images/ui/login.png");
+    backgroundImage.load(engine::asset::assetPath("images/ui/login.png"));
     if (backgroundImage.isNull()) {
         qDebug() << "Failed to load background image";
         setStyleSheet("background-color: #2c3e50; color: #ecf0f1;");  // 回退样式
@@ -66,9 +67,9 @@ RegisterWindow::RegisterWindow(QWidget *parent) : QWidget(parent)
     passwordEdit->setStyleSheet("padding: 8px; border-radius: 5px; background-color: #34495e; color: #ecf0f1;");
 
     QHBoxLayout *buttonLayout = new QHBoxLayout();
-    registerButton = createImageButton("./../../assets/images/ui/sign_up.png", BUTTON_WIDTH);
+    registerButton = createImageButton(engine::asset::assetPath("images/ui/sign_up.png"), BUTTON_WIDTH);
 
-    backButton = createImageButton("./../../assets/images/ui/back.png", BUTTON_WIDTH);;
+    backButton = createImageButton(engine::asset::assetPath("images/ui/back.png"), BUTTON_WIDTH);;
 
     buttonLayout->addWidget(registerButton);
     buttonLayout->addWidget(backButton);

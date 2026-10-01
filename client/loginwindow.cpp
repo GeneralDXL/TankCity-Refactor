@@ -1,17 +1,15 @@
 #include "loginwindow.h"
+#include "asset/AssetPaths.h"
 #include "mainwindow.h"
 #include <QDir>
 #include <QDebug>
 #include <QPixmap>
 
 
-// 静态成员初始化
-QString LoginWindow::accountsFilePath = "data/accounts.txt";
-
 LoginWindow::LoginWindow(QWidget *parent)
     : QWidget(parent)
 {
-    backgroundImage.load("./../../assets/images/ui/login.png");
+    backgroundImage.load(engine::asset::assetPath("images/ui/login.png"));
     if (backgroundImage.isNull()) {
         qDebug() << "Failed to load background image";
         setStyleSheet("background-color: #2c3e50; color: #ecf0f1;");  // 回退样式
@@ -20,10 +18,7 @@ LoginWindow::LoginWindow(QWidget *parent)
         setStyleSheet("color: #ecf0f1;");  // 只保留文字颜色样式
     }
     // 创建数据目录
-    QDir dir;
-    if (!dir.exists("data")) {
-        dir.mkdir("data");
-    }
+    QDir().mkpath(engine::asset::dataRoot());
 
     setWindowTitle("坦克大战 - 登录");
     setFixedSize(800, 700);
@@ -79,8 +74,8 @@ LoginWindow::LoginWindow(QWidget *parent)
     passwordEdit->setStyleSheet("padding: 8px; border-radius: 5px; background-color: #34495e; color: #ecf0f1;");
 
     QHBoxLayout *buttonLayout = new QHBoxLayout();
-    loginButton = createImageButton("./../../assets/images/ui/sign_in.png", BUTTON_WIDTH);
-    registerButton = createImageButton("./../../assets/images/ui/sign_up.png", BUTTON_WIDTH);
+    loginButton = createImageButton(engine::asset::assetPath("images/ui/sign_in.png"), BUTTON_WIDTH);
+    registerButton = createImageButton(engine::asset::assetPath("images/ui/sign_up.png"), BUTTON_WIDTH);
 
     buttonLayout->addWidget(loginButton);
     buttonLayout->addWidget(registerButton);
@@ -140,7 +135,7 @@ void LoginWindow::onRegistrationSuccess(const QString &username, const QString &
 // 静态方法实现
 bool LoginWindow::validateCredentials(const QString &username, const QString &password)
 {
-    QString filePath = "data/accounts.txt";
+    QString filePath = engine::asset::dataPath("accounts.txt");
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         qDebug() << "无法打开账户文件:" << file.errorString();
@@ -182,7 +177,7 @@ void LoginWindow::paintEvent(QPaintEvent *event)
 }
 void LoginWindow::saveCredentials(const QString &username, const QString &password)
 {
-    QString filePath = "data/accounts.txt";
+    QString filePath = engine::asset::dataPath("accounts.txt");
     QFile file(filePath);
     if (!file.open(QIODevice::Append | QIODevice::Text)) {
         qDebug() << "无法保存账户信息:" << file.errorString();

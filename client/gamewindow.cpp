@@ -1,4 +1,8 @@
 #include "gamewindow.h"
+
+#include "core/GameLoop.h"   // engine/core：kTickMs
+#include "net/MessageParser.h"
+#include "render/QPainterBackend.h"
 #include <QPainter>
 #include <QMessageBox>
 #include <QPushButton>
@@ -50,7 +54,6 @@ GameWindow::GameWindow(QWidget *parent) : QWidget(parent)
 
     // 设置默认值
     score = 0;
-    enemySpawnTimer = 0;
     gameRunning = false;
     gamePaused = false;
 
@@ -94,7 +97,10 @@ void GameWindow::paintEvent(QPaintEvent *event)
     }
 
 
-    gameMap->draw(painter);
+    // 地图层走 engine/render 的原语（贴图缓存 + 绘制后端）；
+    // 坦克/子弹这些美术仍是客户端自己的 QPainter 代码（决议 D3-A）。
+    engine::render::QPainterBackend backend(painter);
+    gameMap->draw(backend, textureCache_);
 
     
     for (auto player : players) {
@@ -237,54 +243,44 @@ void GameWindow::drawHud(QPainter &painter)
 void GameWindow::onDisconnected()
 {
     qDebug() << "Disconnected from server";
+
+    // 半条消息不能漏进下一次连接
+    frameBuffer_.clear();
 }
 
 void GameWindow::onReadyRead()
 {
-    while (socket->bytesAvailable()) {
-        // 1. 读取消息长度头
-        QByteArray lengthData = socket->read(sizeof(quint32));
-        if (lengthData.size() != sizeof(quint32)) break;
-        
-        quint32 messageLength = qFromBigEndian<quint32>(reinterpret_cast<const uchar*>(lengthData.constData()));
-        
-        // 2. 等待完整消息到达
-        while (socket->bytesAvailable() < messageLength) {
-            if (!socket->waitForReadyRead(100)) break;
-        }
-        if (socket->bytesAvailable() < messageLength) break;
+    // 分帧交给 client/net：这里只负责「喂字节 → 逐条取消息 → 分发」。
+    // 搬迁前是「读长度头 + waitForReadyRead 阻塞等待」，既会在 GUI 线程上卡最长 100ms，
+    // 又会在等不到正文时把长度头吃掉、导致流错位；两件事都由 MessageFramer 修掉。
+    frameBuffer_.append(socket->readAll());
 
-        QByteArray data = socket->read(messageLength);
-        
-        // 使用QJson处理数据
-        QJsonParseError parseError;
-        QJsonDocument jsonDoc = QJsonDocument::fromJson(data, &parseError);
-        
-        if (parseError.error != QJsonParseError::NoError) {
-            qWarning() << "JSON parse error:" << parseError.errorString();
-            continue;  // 继续处理下一个可用数据
-        }
-        
-        if (!jsonDoc.isObject()) {
-            qWarning() << "Invalid JSON structure, expected object";
+    QJsonObject json;
+    while (true) {
+        switch (frameBuffer_.take(json)) {
+        case client::net::MessageFramer::Status::Ok:
+            break;
+        case client::net::MessageFramer::Status::NeedMoreData:
+            return;   // 剩下的等下一次 readyRead
+        case client::net::MessageFramer::Status::Malformed:
+            qWarning() << "丢弃一条无法解析的消息";
             continue;
         }
-        
-        QJsonObject json = jsonDoc.object();
-        
-        QString type = json["type"].toString();
+
+        // ↓↓ 以下分发与搬迁前逐行一致，只改了「消息是怎么取出来的」 ↓↓
+        const QString type = json["type"].toString();
         if (type == "player_init")
         {
             qDebug() << "Received player tank update\n";
-            // 更新玩家坦克状态
+            // 更新玩家坦克状态（字段名集中在 client/net/MessageParser）
+            const client::net::TankState state = client::net::parseTank(json);
             PlayerPainter *player = new PlayerPainter(playerTankStats());
-            player->setPosition(QPoint(json["position"].toObject()["x"].toInt(),
-                                       json["position"].toObject()["y"].toInt()));
+            player->setPosition(state.position);
             qDebug() << "Player position:" << player->getPosition() << '\n';
-            player->setBodyAngle(json["bodyAngle"].toDouble());
-            player->setTurretAngle(json["turretAngle"].toDouble());
-            player->setHealth(json["health"].toInt());
-            player->setId(json["id"].toInt());
+            player->setBodyAngle(state.bodyAngle);
+            player->setTurretAngle(state.turretAngle);
+            player->setHealth(state.health);
+            player->setId(state.id);
 
             players.insert(player->getId(), std::shared_ptr<PlayerPainter>(player));
 
@@ -302,16 +298,14 @@ void GameWindow::onReadyRead()
         {
             qDebug() << "Received enemy tank update\n";
             // 更新敌人坦克状态
-            int enemyId = json["id"].toInt();
-            EnemyPainter *enemy = new EnemyPainter(json["difficulty"].toInt(),
-                                                    enemyTankStats(json["difficulty"].toInt()));
-            enemy->setPosition(QPoint(json["position"].toObject()["x"].toInt(),
-                                       json["position"].toObject()["y"].toInt()));
-            
-            enemy->setBodyAngle(json["bodyAngle"].toDouble());
-            enemy->setTurretAngle(json["turretAngle"].toDouble());
-            enemy->setHealth(json["health"].toInt());
-            enemy->setId(enemyId);
+            const client::net::TankState state = client::net::parseTank(json);
+            EnemyPainter *enemy = new EnemyPainter(state.difficulty,
+                                                    enemyTankStats(state.difficulty));
+            enemy->setPosition(state.position);
+            enemy->setBodyAngle(state.bodyAngle);
+            enemy->setTurretAngle(state.turretAngle);
+            enemy->setHealth(state.health);
+            enemy->setId(state.id);
 
             enemies.push_back(std::shared_ptr<EnemyPainter>(enemy));
 
@@ -330,10 +324,10 @@ void GameWindow::onReadyRead()
         } 
 		else if (type == "bullet_created") 
 		{
-            BulletPainter *bullet = new BulletPainter(QPoint(json["position"].toObject()["x"].toInt(),
-                                                             json["position"].toObject()["y"].toInt()),
-                                                       json["angle"].toDouble(),
-                                                       json["type1"].toString() == "player" ? BulletPainterType::Player : BulletPainterType::Enemy);
+            const client::net::BulletState state = client::net::parseBullet(json);
+            BulletPainter *bullet = new BulletPainter(
+                state.position, state.angle,
+                state.fromPlayer ? BulletPainterType::Player : BulletPainterType::Enemy);
             bullets.push_back(std::make_shared<BulletPainter>(*bullet));                                           
         }
          else if (type == "delete_wall")
@@ -350,10 +344,9 @@ void GameWindow::onReadyRead()
             bullets.clear(); // 智能指针会自动释放内存
             items.clear();
             score = 0;
-            enemySpawnTimer = 0;
             gameRunning = true;
             gamePaused = false;
-            gameTimer->start(16); // 每秒60帧
+            gameTimer->start(engine::core::kTickMs); // 上行频率 = 逻辑帧长（唯一定义在 engine/core）
 
         }
         else if (type == "map_init")
@@ -364,14 +357,10 @@ void GameWindow::onReadyRead()
 
             for (const QJsonValue &wallValue : wallArray)
             {
-                QJsonObject wallObj = wallValue.toObject();
-                WallPainter wall(wallObj["position"].toObject()["x"].toInt(),
-                                 wallObj["position"].toObject()["y"].toInt(),
-                                 wallObj["size"].toObject()["width"].toInt(),
-                                 wallObj["size"].toObject()["height"].toInt(),
-                                 wallObj["type"].toInt(),
-                                 wallObj["id"].toInt());
-                gameMap->addWall(wall);
+                const client::net::WallState state = client::net::parseWall(wallValue.toObject());
+                gameMap->addWall(WallPainter(state.rect.x(), state.rect.y(),
+                                             state.rect.width(), state.rect.height(),
+                                             state.type, state.id));
             }
 
         }
@@ -408,45 +397,40 @@ void GameWindow::onReadyRead()
 
             for (const QJsonValue &playerValue : playerArray)
             {
-                QJsonObject playerObj = playerValue.toObject();
-                int playerId = playerObj["id"].toInt();
+                const client::net::TankState state = client::net::parseTank(playerValue.toObject());
 
-                if (players.contains(playerId))
+                if (players.contains(state.id))
                 {
-                    PlayerPainter *player = players[playerId].get();
-                    player->setPosition(QPoint(playerObj["position"].toObject()["x"].toInt(),
-                                               playerObj["position"].toObject()["y"].toInt()));
-                    player->setBodyAngle(playerObj["bodyAngle"].toDouble());
-                    player->setTurretAngle(playerObj["turretAngle"].toDouble());
-                    player->setHealth(playerObj["health"].toInt());
+                    PlayerPainter *player = players[state.id].get();
+                    player->setPosition(state.position);
+                    player->setBodyAngle(state.bodyAngle);
+                    player->setTurretAngle(state.turretAngle);
+                    player->setHealth(state.health);
 
                 }else
                 {
                     PlayerPainter *newPlayer = new PlayerPainter(playerTankStats());
-                    newPlayer->setPosition(QPoint(playerObj["position"].toObject()["x"].toInt(),
-                                                  playerObj["position"].toObject()["y"].toInt()));
-                    newPlayer->setBodyAngle(playerObj["bodyAngle"].toDouble());
-                    newPlayer->setTurretAngle(playerObj["turretAngle"].toDouble());
-                    newPlayer->setHealth(playerObj["health"].toInt());
-                    newPlayer->setId(playerId);
-                    players.insert(playerId, std::shared_ptr<PlayerPainter>(newPlayer));
+                    newPlayer->setPosition(state.position);
+                    newPlayer->setBodyAngle(state.bodyAngle);
+                    newPlayer->setTurretAngle(state.turretAngle);
+                    newPlayer->setHealth(state.health);
+                    newPlayer->setId(state.id);
+                    players.insert(state.id, std::shared_ptr<PlayerPainter>(newPlayer));
                 }
             }
             QJsonArray enemyArray = json["enemies"].toArray();
             enemies.clear();
             for (const QJsonValue &enemyValue : enemyArray)
             {
-                QJsonObject enemyObj = enemyValue.toObject();
-                
-                int enemyId = enemyObj["id"].toInt();
-                EnemyPainter *newEnemy = new EnemyPainter(enemyObj["difficulty"].toInt(),
-                                                          enemyTankStats(enemyObj["difficulty"].toInt()));
-                newEnemy->setPosition(QPoint(enemyObj["position"].toObject()["x"].toInt(),
-                                                enemyObj["position"].toObject()["y"].toInt()));
-                newEnemy->setBodyAngle(enemyObj["bodyAngle"].toDouble());
-                newEnemy->setTurretAngle(enemyObj["turretAngle"].toDouble());
-                newEnemy->setHealth(enemyObj["health"].toInt());
-                newEnemy->setId(enemyId);
+                const client::net::TankState state = client::net::parseTank(enemyValue.toObject());
+
+                EnemyPainter *newEnemy = new EnemyPainter(state.difficulty,
+                                                          enemyTankStats(state.difficulty));
+                newEnemy->setPosition(state.position);
+                newEnemy->setBodyAngle(state.bodyAngle);
+                newEnemy->setTurretAngle(state.turretAngle);
+                newEnemy->setHealth(state.health);
+                newEnemy->setId(state.id);
                 enemies.push_back(std::shared_ptr<EnemyPainter>(newEnemy));
             }
             QJsonArray bulletArray = json["bullets"].toArray();
@@ -454,25 +438,22 @@ void GameWindow::onReadyRead()
 
             for (const QJsonValue &bulletValue : bulletArray)
             {
-                QJsonObject bulletObj = bulletValue.toObject();
-                auto bullet = std::make_shared<BulletPainter>(QPoint(bulletObj["position"].toObject()["x"].toInt(),
-                                                bulletObj["position"].toObject()["y"].toInt()),
-                                                bulletObj["angle"].toDouble(),
-                                                bulletObj["type1"].toString() == "player" ? BulletPainterType::Player : BulletPainterType::Enemy);
-                bullets.push_back(bullet);
+                const client::net::BulletState state = client::net::parseBullet(bulletValue.toObject());
+                bullets.push_back(std::make_shared<BulletPainter>(
+                    state.position, state.angle,
+                    state.fromPlayer ? BulletPainterType::Player : BulletPainterType::Enemy));
             }
             score = json["score"].toInt();
 
             QJsonArray itemArray = json["items"].toArray();
             items.clear();
             for (const QJsonValue &itemValue : itemArray) {
-                QJsonObject itemObj = itemValue.toObject();
-                int itemId = itemObj["id"].toInt();
+                const client::net::ItemState state = client::net::parseItem(itemValue.toObject());
                 Item *newitem = new Item;
-                newitem->id = itemId;
-                newitem->x = itemObj["x"].toInt();
-                newitem->y = itemObj["y"].toInt();
-                newitem->type = static_cast<ItemType>(itemObj["item_type"].toInt());
+                newitem->id = state.id;
+                newitem->x = state.x;
+                newitem->y = state.y;
+                newitem->type = static_cast<ItemType>(state.type);
                 items.push_back(std::shared_ptr<Item>(newitem));
             }
         }
@@ -495,11 +476,12 @@ void GameWindow::onReadyRead()
             }
         }
         else if (type == "item_spawned") {
+            const client::net::ItemState state = client::net::parseItem(json);
             std::shared_ptr<Item> item = std::make_shared<Item>();
-            item->id = json["id"].toInt();
-            item->x = json["x"].toInt();
-            item->y = json["y"].toInt();
-            item->type = static_cast<ItemType>(json["item_type"].toInt());
+            item->id = state.id;
+            item->x = state.x;
+            item->y = state.y;
+            item->type = static_cast<ItemType>(state.type);
             items.append(item);
         }
         else if (type == "item_picked") {
@@ -545,32 +527,30 @@ void GameWindow::sendToServer(const QJsonObject &json)
 
 void GameWindow::keyPressEvent(QKeyEvent *event)
 {
-    if (event->key() == Qt::Key_W || event->key() == Qt::Key_A ||
-        event->key() == Qt::Key_S || event->key() == Qt::Key_D ) {
-        pressedKeys.insert(event->key());
-    }
+    // 容器不作键位解释，原样记录；上行时只取用 W/A/S/D（键位表在 sendKey() 里）。
+    // 相比搬迁前"只记录 WASD"，这里记录任意键，但上行的 JSON 字段完全没变。
+    inputTracker_.keyPressed(event->key());
     sendKey();
 }
 
 void GameWindow::keyReleaseEvent(QKeyEvent *event)
 {
-    if (event->key() == Qt::Key_W || event->key() == Qt::Key_A ||
-        event->key() == Qt::Key_S || event->key() == Qt::Key_D ) {
-        pressedKeys.remove(event->key());
-    }
+    // 对任意键都记录松开：只记录 WASD 的话，其它键会永远留在按下集合里。
+    inputTracker_.keyReleased(event->key());
     sendKey();
 }
 
 void GameWindow::mouseMoveEvent(QMouseEvent *event)
 {
-    mousePos = event->pos();
+    inputTracker_.setPointer(event->pos());
     sendKey();
 }
 
 void GameWindow::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton) {
-        pressedKeys.insert(Qt::LeftButton);
+        // 边沿事件：按下记一次，而不是"左键按着"这个状态 —— 这是长按不连发的前提。
+        inputTracker_.primaryButtonPressed();
     }
     sendKey();
 }
@@ -582,20 +562,23 @@ void GameWindow::sendKey()
 
     input["type"] = "key_input";
     
+    // 取一次快照：主键的待发标记在这一步被取走 —— 这就是「长按不连发」的实现。
+    const engine::input::InputTracker::Snapshot snapshot = inputTracker_.takeSnapshot();
+
     QJsonObject keys;
-    keys["w"] = pressedKeys.contains(Qt::Key_W);
-    keys["a"] = pressedKeys.contains(Qt::Key_A);
-    keys["s"] = pressedKeys.contains(Qt::Key_S);
-    keys["d"] = pressedKeys.contains(Qt::Key_D);
+    keys["w"] = snapshot.keysDown.contains(Qt::Key_W);
+    keys["a"] = snapshot.keysDown.contains(Qt::Key_A);
+    keys["s"] = snapshot.keysDown.contains(Qt::Key_S);
+    keys["d"] = snapshot.keysDown.contains(Qt::Key_D);
     input["keys"] = keys;
 
     QJsonObject mousePosObj;
-    mousePosObj["x"] = mousePos.x();
-    mousePosObj["y"] = mousePos.y();
+    mousePosObj["x"] = snapshot.pointer.x();
+    mousePosObj["y"] = snapshot.pointer.y();
     input["mousePos"] = mousePosObj;
     
-    input["shoot"] = pressedKeys.contains(Qt::LeftButton);
-    pressedKeys.remove(Qt::LeftButton); // 清除左键按下状态，避免重复发送
+    // 边沿触发：待发标记已在取快照时清除，所以一次点击只发一次 true（长按不连发）。
+    input["shoot"] = snapshot.primaryPressed;
 
     sendToServer(input);
 }
@@ -651,5 +634,5 @@ void GameWindow::startGame(int mapIndex, int difficulty, int mode)
             break;
     }
     sendToServer(json);
-    pressedKeys.clear();
+    inputTracker_.reset();   // 等价于搬迁前"清空按键集合"：清掉残留按键
 }

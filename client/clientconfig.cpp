@@ -1,5 +1,7 @@
 #include "clientconfig.h"
 
+#include "asset/AssetPaths.h"
+
 #include <QCoreApplication>
 #include <QDebug>
 #include <QDir>
@@ -10,7 +12,7 @@ namespace client {
 
 QString assetsRoot()
 {
-    return QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("../../assets"));
+    return engine::asset::assetRoot();   // 定位逻辑统一在 engine/asset
 }
 
 const tankcity::config::Config *config()

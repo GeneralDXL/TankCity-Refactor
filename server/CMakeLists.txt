@@ -1,23 +1,12 @@
 # 服务端：权威游戏逻辑
 
-find_package(Qt6 REQUIRED COMPONENTS Core Network Widgets)
+# 只依赖 Core / Network：服务端不绘制，Widgets（乃至 Gui）都不该出现在这里
+find_package(Qt6 REQUIRED COMPONENTS Core Network)
 
 qt_add_executable(tankcity_server
     main.cpp
     game.cpp
     game.h
-    player.cpp
-    player.h
-    enemy.cpp
-    enemy.h
-    bullet.cpp
-    bullet.h
-    tank.cpp
-    tank.h
-    map.cpp
-    map.h
-    wall.cpp
-    wall.h
     server.cpp
     server.h
 )
@@ -25,8 +14,10 @@ qt_add_executable(tankcity_server
 target_link_libraries(tankcity_server PRIVATE
     Qt6::Core
     Qt6::Network
-    Qt6::Widgets
-    tankcity_shared   # 关卡/配置模型：assets/levels/*.json 的加载器
+    tankcity_engine_core   # 固定步长逻辑循环（引擎层）
+    tankcity_engine_asset  # 资源定位：按可执行文件而非工作目录（engine/asset）
+    tankcity_game     # 实体与世界（M1.1 从 server/ 提升为独立层）
+    tankcity_shared   # 关卡/配置模型：assets/levels/*.json 的加载器（由 game 传递依赖）
 )
 
 # Windows 特定定义（Winsock 2 / 避免 min/max 宏冲突）

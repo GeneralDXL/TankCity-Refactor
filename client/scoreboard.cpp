@@ -1,4 +1,5 @@
 #include "scoreboard.h"
+#include "asset/AssetPaths.h"
 #include "mainwindow.h"
 #include <QVBoxLayout>
 #include <QHeaderView>
@@ -19,7 +20,7 @@ ScoreBoard::ScoreBoard(QWidget *parent) : QWidget(parent)
     layout->setContentsMargins(50,50,50,50);
 
     QLabel *titleLabel = new QLabel(this);
-    QPixmap scoreboardPixmap("./../../assets/images/ui/row.png"); // 使用排行榜图片
+    QPixmap scoreboardPixmap(engine::asset::assetPath("images/ui/row.png")); // 使用排行榜图片
     if(!scoreboardPixmap.isNull()) {
         titleLabel->setPixmap(scoreboardPixmap.scaledToWidth(400, Qt::SmoothTransformation));
         titleLabel->setAlignment(Qt::AlignCenter);
@@ -56,7 +57,7 @@ ScoreBoard::ScoreBoard(QWidget *parent) : QWidget(parent)
 
     backButton = new QPushButton( this);
 
-    QPixmap returnPixmap("./../../assets/images/ui/return.png");
+    QPixmap returnPixmap(engine::asset::assetPath("images/ui/return.png"));
     if (!returnPixmap.isNull()) {
         backButton->setIcon(QIcon(returnPixmap.scaledToWidth(200, Qt::SmoothTransformation)));
         backButton->setIconSize(returnPixmap.scaledToWidth(200, Qt::SmoothTransformation).size());
@@ -90,7 +91,7 @@ void ScoreBoard::loadScores()
     scores.clear();
 
 
-    QFile file("data/scores.txt");
+    QFile file(engine::asset::dataPath("scores.txt"));
     if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         QTextStream in(&file);
         while (!in.atEnd()) {

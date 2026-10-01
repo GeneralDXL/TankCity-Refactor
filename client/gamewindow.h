@@ -4,7 +4,11 @@
 #include <QWidget>
 #include <QTimer>
 #include <QTcpSocket>
-#include "painter.h"
+#include "asset/AssetPaths.h"
+#include "input/InputTracker.h"
+#include "net/MessageFramer.h"
+#include "render/painter.h"
+#include "render/TextureCache.h"
 
 enum class ItemType {
     HealthPack,     // 生命恢复
@@ -52,13 +56,20 @@ private:
     
 
     QTcpSocket *socket;
+    /// 收包分帧缓冲（client/net）：把 TCP 字节流切成一条条完整消息
+    client::net::MessageFramer frameBuffer_;
 
     QTimer *gameTimer;
     MapPainter *gameMap;
-    QPoint mousePos;
-    QSet<int> pressedKeys; // 存储按下的键
+    /// 输入状态容器（engine/input）：按键集合 + 指针位置 + 边沿触发的主键。
+    /// 容器不认识「哪个键算什么」——那张键位表在 sendKey() 里（属客户端的事）。
+    engine::input::InputTracker inputTracker_;
 
     QMap<int, std::shared_ptr<PlayerPainter>> players;
+
+    /// 地图贴图缓存（每个文件只加载一次）。
+    /// 资源根由 engine/asset 按**可执行文件目录**解析 —— 从任何工作目录启动都能找到 assets/。
+    engine::render::TextureCache textureCache_{engine::asset::assetRoot()};
     QList<std::shared_ptr<EnemyPainter>> enemies;
     std::vector<std::shared_ptr<BulletPainter>> bullets;
 
@@ -67,7 +78,6 @@ private:
     int score;
     int currentDifficulty;
     int currentMapIndex;
-    int enemySpawnTimer;
 
     // 道具相关
     QList<std::shared_ptr<Item>> items;
