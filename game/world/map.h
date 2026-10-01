@@ -1,130 +1,90 @@
 #ifndef MAP_H
 #define MAP_H
 
-#include <QVector>
-#include <QRect>
+#include <QJsonObject>
 #include <QObject>
+#include <QPoint>
+#include <QRect>
+#include <QVector>
 
 #include "wall.h"
-#include "config/ConfigLoader.h"
-#include "config/ConfigTypes.h"
-#include "physics/CollisionWorld.h"
-#include "physics/Grid.h"
+#include "world.h"
 
 class Tank;
 
+/**
+ * 地图：**游戏规则**的那一半 —— 物块被打中之后扣血、销毁、广播。
+ *
+ * M3 把「几何」拆给了 `World`（见 world.h）。于是 `Map` 只剩两件事：
+ *  1. 把几何问题**整层转发**给 `World`（既有调用点因此一行不改）；
+ *  2. 把规则问题留在自己身上：子弹命中 → 扣血 → 血量归零则广播 `delete_wall` 并移除物块。
+ *
+ * 本类**是** `QObject` 且持有信号 —— 发消息正是它存在的理由，与 `World`
+ * 「连 QObject 都不是」形成对照。（拆分判据见 world.h 的类注释。）
+ *
+ * ## 为什么保留这层转发
+ * `Tank`/`Player`/`Enemy`/`Game` 的签名里写的都是 `Map *`（`Tank::move(..., Map *)`、
+ * `Enemy::update(..., Map *)`……）。一步到位改签名，会把「拆出 World」与「改实体接口」
+ * 混进同一个提交里，一旦出问题无法二分。等 tile 世界与双摇杆真正落到 `World` 上
+ * （M3 后续步骤）时再迁移 —— 那时这些签名本来就要重写。
+ */
 class Map : public QObject
 {
     Q_OBJECT
 public:
     Map();
 
+    // --- 几何：整层转发给 World ---
+
     /**
-     * 按关卡数据装载墙体（边界 + 物块），替换掉旧的硬编码 switch-case。
-     *
-     * 关卡几何来自 assets/levels/*.json；物块的碰撞/贴图仍然由 `wall.h` 的 int type
-     * 表达，所以这里做一次 block id → type 的映射（见 map.cpp）。物块的行为
-     * （可破坏性、三项碰撞开关、地形倍率）则直接取自 config 里的 BlockDef ——
-     * 关卡只描述「哪个物块摆在哪儿」。
-     *
-     * @return false 表示关卡里出现了 Wall 无法表达的物块 id，或引用了 blocks.json
-     *         里不存在的物块（数据与引擎对不上）。此时地图为空，调用方应当放弃开局
-     *         而不是让玩家掉进空地图。
+     * 按关卡数据装载墙体。语义与返回值的说明见 `World::loadLevel`。
+     * @return false 表示关卡数据与引擎对不上（物块 id 无法表达 / blocks.json 里没有）
      */
     bool loadLevel(const tankcity::config::LevelData &level,
                    const tankcity::config::Config &config);
 
-    bool checkCollision(const QRect &rect) const; // 碰撞检测
+    static const int MAP_WIDTH = World::MAP_WIDTH;
+    static const int MAP_HEIGHT = World::MAP_HEIGHT;
+    static const int GRID_SIZE = World::GRID_SIZE;
+
+    int getGridWidth() const { return world_.getGridWidth(); }
+    int getGridHeight() const { return world_.getGridHeight(); }
+
+    QPoint worldToGrid(const QPoint &worldPos) const { return world_.worldToGrid(worldPos); }
+    QPoint gridToWorld(const QPoint &gridPos) const { return world_.gridToWorld(gridPos); }
+    bool isCellWalkable(int gridX, int gridY) const { return world_.isCellWalkable(gridX, gridY); }
+    bool isLineWalkable(const QPoint &start, const QPoint &end) const
+    {
+        return world_.isLineWalkable(start, end);
+    }
+    int getTerrainType(const QPoint &position) const { return world_.getTerrainType(position); }
+    double getMoveSpeedFactor(const QPoint &position) const
+    {
+        return world_.getMoveSpeedFactor(position);
+    }
+
+    bool checkCollision(const QRect &rect) const { return world_.checkCollision(rect); }
+
+    /// @param tank 透传给 `World::checkTankCollision`（目前未使用，见其说明）。
+    int checkTankCollision(const QRect &rect, const Tank *tank) const
+    {
+        return world_.checkTankCollision(rect, tank);
+    }
+
+    const QVector<Wall> &getWalls() const { return world_.getWalls(); }
+
+    // --- 规则：只有这一条不属于几何 ---
+
     /// 子弹碰撞：返回 true 表示子弹命中并应当消失。
     /// @param damage 子弹自带的伤害，打在可破坏物块上时由这里扣除
     ///               （伤害值只由配置定义，因此随参数传入而不是写死在这里）。
     bool checkBulletCollision(const QRect &rect, int damage);   //子弹碰撞检测
-    /// @param tank 目前未使用（旧签名如此，调用方仍传）；保留以备 M3 按体型判定。
-    int checkTankCollision(const QRect &rect, const Tank *tank) const; //坦克碰撞检测
-    const QVector<Wall>& getWalls() const { return walls; }
-
-    static const int MAP_WIDTH=1200;
-    static const int MAP_HEIGHT=900;
-
-    /**
-     * 单元格边长（像素）。
-     *
-     * M3 由 **40 改为 50**：`900 / 40 = 22.5`，纵向网格非整数 —— 最后 20px 落在网格之外，
-     * A\* 甚至把这个非整数写进了死代码（`neighborPos.y() >= 22.5`）。
-     * 而 `1200 / 50 = 24`、`900 / 50 = 18`，都是整数。
-     *
-     * 为什么改格尺寸而不是改世界高度（关卡数据里 `world.height` 仍是 900）：
-     * 关卡里有 `y + h = 890` 的墙正压在底边界上，世界一变矮就必须动**几何**，
-     * 而那会破坏 `tests/data/legacy_levels.json` 的冻结快照 —— 那是 M2 用来证明
-     * 「关卡几何搬出 C++ 未失真」的物证。改格尺寸则关卡数据**一字不动**。
-     *
-     * 顺带解决一处不匹配：坦克的碰撞盒是 40×40，格子现在正好 50，见 kCellPadding。
-     */
-    static const int GRID_SIZE=50;
-
-    /// 横向 / 纵向格子数（1200/50 = 24、900/50 = 18，均为整数）
-    int getGridWidth() const { return MAP_WIDTH / GRID_SIZE; }
-    int getGridHeight() const { return MAP_HEIGHT / GRID_SIZE; }
-
-    QPoint worldToGrid(const QPoint& worldPos) const;
-    bool isCellWalkable(int gridX, int gridY) const;
-    bool isLineWalkable(const QPoint& start, const QPoint& end) const;
-    QPoint gridToWorld(const QPoint& gridPos) const;
-    int getTerrainType(const QPoint &position) const;
-
-    /**
-     * 该位置的地形移动倍率，1.0 表示不受影响。
-     *
-     * 取自 blocks.json 的 `moveSpeedFactor`（森林 0.5、冰 1.5；0 表示该物块不影响
-     * 移动）。取「首个包含该点的墙体」与旧的 getTerrainType 同序，故结果一致。
-     */
-    double getMoveSpeedFactor(const QPoint &position) const;
 
 signals:
     void broadcastMessage(const QJsonObject &data); // 广播消息
 
 private:
-    /**
-     * 碰撞标记：**含义由游戏层定义**，引擎只负责按位匹配
-     * （`engine/physics/CollisionWorld` 不知道「坦克」「子弹」是什么）。
-     */
-    enum CollisionFlags {
-        kBlocksMove = 1u << 0,   ///< 是否挡移动（blocks.json 的 blocksTank）
-        kBlocksShot = 1u << 1,   ///< 是否挡投射物（blocks.json 的 blocksBullet）
-    };
-
-    /**
-     * 「某一格能否通过」判定时的内缩像素。
-     *
-     * 取 5 使探测盒成为 `50 - 2*5 = 40` 见方 —— **正好等于坦克的碰撞盒**：
-     * 格子内缩之后仍容得下坦克，才算这一格可通行。格尺寸是 40 时这个关系并不成立
-     * （40 内缩 5 得 30×30，比坦克还小），只能靠"贴着墙走"凑合；改成 50 之后，
-     * 「这一格能否通过」与「坦克能不能站进去」才真正是同一件事。
-     */
-    static const int kCellPadding = 5;
-
-    /// 由物块配置转成碰撞标记。
-    static engine::physics::CollisionWorld::Flags flagsOf(const Wall &wall);
-
-    /**
-     * 重建碰撞世界。
-     *
-     * 碰撞世界只保存**几何与标记的副本**（这样查询不必每次遍历 Wall 对象、也不必
-     * 关心血量等状态），所以装载与移除物块后都要同步一次。物块数量是关卡级别
-     * （几十个），直接整体重建比维护索引更不容易出错。
-     */
-    void rebuildCollisionWorld();
-
-    /// 按 id 移除物块并同步碰撞世界；不存在返回 false。
-    bool removeWallById(int wallId);
-
-    const Wall *wallById(int wallId) const;
-    Wall *mutableWallById(int wallId);
-
-    QVector<Wall> walls;     //边界墙
-
-    engine::physics::Grid grid_{GRID_SIZE};          ///< 格点换算（A* 与「这一格能否通过」）
-    engine::physics::CollisionWorld world_;          ///< 静态物块的碰撞查询
+    World world_;
 };
 
 #endif

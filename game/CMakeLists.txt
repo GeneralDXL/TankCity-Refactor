@@ -14,6 +14,8 @@ add_library(tankcity_game STATIC
     entity/bullet.cpp
     entity/wall.h
     entity/wall.cpp
+    world/world.h
+    world/world.cpp
     world/map.h
     world/map.cpp
 )
