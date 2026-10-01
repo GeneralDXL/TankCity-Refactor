@@ -1,7 +1,7 @@
 #ifndef GAMEWINDOW_H
 #define GAMEWINDOW_H
 
-#include <QTimer>
+#include "core/GameLoop.h"   // engine/core：固定步长循环（kTickMs 的唯一来源）
 #include <QVector>
 #include <QSet>
 #include "player.h"
@@ -118,7 +118,9 @@ private:
     QSet<std::shared_ptr<Enemy>> enemiesToRemove; // 用于存储待删除的敌人
     
     Map *gameMap;
-    QTimer *gameTimer;
+
+    /// 逻辑循环：固定 kTickMs；内部 timer 归属本对象，随 moveToThread 一起迁移
+    engine::core::GameLoop gameLoop_;
 
     // 六份配置合一（game/layers/blocks/entities/items/difficulty），首次开局时加载
     tankcity::config::Config m_config;

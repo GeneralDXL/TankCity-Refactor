@@ -7,7 +7,7 @@
 #include <QJsonObject>
 #include <QRandomGenerator>
 #include <QDateTime>
-#include <QTimer>
+#include <QTimer>   // 道具时效与结算延时用的是 QTimer::singleShot（走真实时间，与帧无关）
 #include "server.h"
 
 namespace {
@@ -98,6 +98,7 @@ bool Game::loadLevelForIndex(int index)
 }
 
 Game::Game()
+    : gameLoop_([this] { gameLoop(); }, this)   // 循环回调指向本对象的私有槽
 {
     players.clear();
     items.clear();
@@ -105,8 +106,6 @@ Game::Game()
     bullets.clear();
 
     gameMap = new Map();
-    gameTimer = new QTimer(this);
-    connect(gameTimer, &QTimer::timeout, this, &Game::gameLoop);
     connect(gameMap, &Map::broadcastMessage, this, &Game::onWallDelete);
     
     gameRunning = false;
@@ -151,7 +150,7 @@ void Game::startEndlessGame(int mapIndex, int difficulty)
     
     gameRunning = true;
     gamePaused = false;
-    gameTimer->start(16); // 60 FPS
+    gameLoop_.start();
     gameModle = 1;
 
     enemies.clear();
@@ -179,7 +178,7 @@ void Game::startMultiGame(int mapIndex)
     gameModle = 2;
     gameRunning = true;
     gamePaused = false;
-    gameTimer->start(16); // 60 FPS
+    gameLoop_.start();
 
     enemies.clear();
     items.clear();
@@ -226,7 +225,7 @@ void Game::startGame(int mapIndex, int difficulty)
     
     gameRunning = true;
     gamePaused = false;
-    gameTimer->start(16); // 60 FPS
+    gameLoop_.start();
 
     enemies.clear();
     items.clear();
@@ -340,10 +339,7 @@ void Game::gameLoop()
 
     if (gameModle == 2 && gameS && players.size() == 1) {
         isEnd = true;
-        if (gameTimer) {
-            gameTimer->stop();
-            disconnect(gameTimer, nullptr, this, nullptr);
-        }
+        gameLoop_.stop();
         gameS = false;
         multiGameOver();
     }
@@ -539,10 +535,7 @@ void Game::updateGame()
         if (players.isEmpty()) {
             
             isEnd = true;
-            if (gameTimer) {
-                gameTimer->stop();
-                disconnect(gameTimer, nullptr, this, nullptr);
-            }            
+            gameLoop_.stop();
             endlessGameOver();
             return;
         }
@@ -557,10 +550,7 @@ void Game::updateGame()
             qDebug() << "winwinwin";
             
             isEnd = true;
-            if (gameTimer) {
-                gameTimer->stop();
-                disconnect(gameTimer, nullptr, this, nullptr);
-            }
+            gameLoop_.stop();
             gameOver(true);
             return;
         }
@@ -568,10 +558,7 @@ void Game::updateGame()
             qDebug() << "NoNoNo";
             
             isEnd = true;
-            if (gameTimer) {
-                gameTimer->stop();
-                disconnect(gameTimer, nullptr, this, nullptr);
-            }            
+            gameLoop_.stop();
             gameOver(false);
             return;
         }
@@ -674,10 +661,7 @@ void Game::checkCollisions()
                         if (overNum == maxEnemies && gameModle == 0) {
                             
                             isEnd = true;
-                            if (gameTimer) {
-                                gameTimer->stop();
-                                disconnect(gameTimer, nullptr, this, nullptr);
-                            }
+                            gameLoop_.stop();
                             gameOver(true);
                             return;
                         }
