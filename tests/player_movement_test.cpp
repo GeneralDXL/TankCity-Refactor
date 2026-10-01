@@ -24,7 +24,7 @@
 namespace {
 
 /// 速度取整数 5，使「每帧 5px」的期望值精确可断言（见下面的取整说明）。
-tankcity::config::TankStats makeStats(double moveSpeed = 5.0)
+tankcity::config::TankStats makeStats(double moveSpeed = 5.0, int box = 40)
 {
     tankcity::config::TankStats stats;
     stats.health = 10;
@@ -33,13 +33,15 @@ tankcity::config::TankStats makeStats(double moveSpeed = 5.0)
     stats.bulletSpeed = 10.0;
     stats.bulletDamage = 1;
     stats.muzzleOffset = 20;
+    stats.collisionBoxW = box;
+    stats.collisionBoxH = box;
     return stats;
 }
 
 /// 在一个没有墙的空地图上，把玩家放在世界中央。
-std::unique_ptr<Player> makePlayer(Map *map, double moveSpeed = 5.0)
+std::unique_ptr<Player> makePlayer(Map *map, double moveSpeed = 5.0, int box = 40)
 {
-    auto player = std::make_unique<Player>(map, makeStats(moveSpeed));
+    auto player = std::make_unique<Player>(map, makeStats(moveSpeed, box));
     player->init(Map::MAP_WIDTH / 2, Map::MAP_HEIGHT / 2);
     return player;
 }
@@ -195,4 +197,39 @@ TEST(PlayerMovement, AimIsAnAbsolutePointNotADirection) {
     for (int i = 0; i < 40; ++i)
         player->update();
     EXPECT_NEAR(player->getTurretAngle(), 135.0f, 2.0f) << "瞄准点被当成了方向向量（应当随位置变化）";
+}
+
+/**
+ * 子步扫掠不得丢掉位移 —— 钉住「末点直接用终点」这个设计决定。
+ *
+ * 速度 70、盒 40 → 子步上限 40/2 = 20 → 4 个子步，每步 17.5px。
+ * 若实现改成「逐个子步累加截断」，每步只走 17px、四步共 68px（少 2px），
+ * 位移就会随帧率/速度悄悄缩水。
+ */
+TEST(PlayerMovement, SubSteppedMoveDoesNotLoseDistance) {
+    Map map;
+    auto player = makePlayer(&map, 70.0);   // 70 > 盒 40 的一半 → 必然多子步
+    const QPoint start = player->getPosition();
+
+    player->setMoveVector(QPointF(1, 0));
+    player->update();
+
+    EXPECT_EQ(player->getPosition() - start, QPoint(70, 0)) << "子步累加截断丢掉了位移";
+}
+
+/**
+ * 探测盒尺寸来自配置，不再是写死的 40（M3 决议 D4）。
+ *
+ * 在此之前：`Tank::move()` 的两处探测都写死 40×40，而 entities.json 的 `collisionBox`
+ * 虽然被加载器解析进了 `TankDef`，却没有继续走到 `TankStats` —— 即**改 JSON 不生效**。
+ */
+TEST(PlayerMovement, CollisionBoxComesFromStats) {
+    Map map;
+    tankcity::config::TankStats stats = makeStats();
+    stats.collisionBoxW = 24;   // 故意取不等值，确保两个分量各自接线
+    stats.collisionBoxH = 36;
+    Player player(&map, stats);
+
+    EXPECT_EQ(player.getCollisionBoxWidth(), 24);
+    EXPECT_EQ(player.getCollisionBoxHeight(), 36);
 }

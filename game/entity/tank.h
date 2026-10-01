@@ -22,7 +22,6 @@ public:
     virtual ~Tank() = default;
 
     virtual void move(float angle, float distance, Map *map); // 修改移动函数
-    bool canMove(float angle, float distance, Map *map) const; // 修改移动检测
     virtual Bullet* shoot() = 0;
     void takeDamage(int amount);
     bool isDestroyed() const;
@@ -31,6 +30,10 @@ public:
     float getSpeed() const { return speed; } // 速度获取
     void setSpeed(float newSpeed) { speed = newSpeed; } // 速度设置
     int getBulletDamage() const { return bulletDamage; } // 子弹伤害（配置）
+
+    /// 移动探测盒尺寸（像素）：来自 entities.json 的 collisionBox，不再是写死的 40。
+    int getCollisionBoxWidth() const { return collisionBoxW; }
+    int getCollisionBoxHeight() const { return collisionBoxH; }
 
     void setPosition(const QPoint& pos) { position = pos; }
     void setBodyAngle(float angle) { bodyAngle = angle; } // 车身角度设置
@@ -52,7 +55,23 @@ protected:
     int shootCooldown;
     int shootDelay;
     float turretAngle = 0;  // 炮管角度
+    int collisionBoxW = 40; // 移动探测盒宽（配置 collisionBox[0]）
+    int collisionBoxH = 40; // 移动探测盒高（配置 collisionBox[1]）
     Map *gameMap;
+
+private:
+    /// 以 center 为中心、按配置尺寸构造探测矩形。
+    QRect probeRect(const QPoint &center) const;
+
+    /**
+     * 该探测矩形所在位置能否通行。
+     *
+     * 与旧实现的两处判定等价（`canMove()` 与 `move()` 里的 switch）：
+     * 森林/冰块可穿过（只影响速度），无碰撞放行，其余（边界/砖/钢/海）拦截。
+     * 旧写法把这一条谓词写了两遍，而且 `canMove()` 那份的位移**漏乘了地形倍率** ——
+     * 合并成一处后这种不一致不可能再出现。
+     */
+    bool isPassable(const QRect &probe, Map *map) const;
 };
 
 
