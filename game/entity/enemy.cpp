@@ -495,11 +495,6 @@ Bullet* Enemy::shoot()
                           });
     }
 
-QRect Enemy::getRect() const
-{
-    return QRect(position.x() - 15, position.y() - 15, 30, 30);
-}
-
 
 
 

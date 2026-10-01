@@ -79,6 +79,11 @@ QRect Tank::probeRect(const QPoint &center) const
                  collisionBoxW, collisionBoxH);
 }
 
+QRect Tank::getRect() const
+{
+    return probeRect(position);
+}
+
 bool Tank::isPassable(const QRect &probe, Map *map) const
 {
     const int type = map->checkTankCollision(probe, this);

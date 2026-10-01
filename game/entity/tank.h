@@ -35,6 +35,15 @@ public:
     int getCollisionBoxWidth() const { return collisionBoxW; }
     int getCollisionBoxHeight() const { return collisionBoxH; }
 
+    /**
+     * 车体矩形（以当前位置为中心、按配置尺寸）。
+     *
+     * **受击判定与移动探针共用这一个尺寸**（M3 决议 D4）。在此之前是三套值：
+     * 移动 40、`getRect()` 30、配置里写着 40 却没人读 —— 子弹会从车身边缘擦过去
+     * 而不命中，同一个坦克到底多大取决于问哪一处。
+     */
+    QRect getRect() const;
+
     void setPosition(const QPoint& pos) { position = pos; }
     void setBodyAngle(float angle) { bodyAngle = angle; } // 车身角度设置
     float getBodyAngle() const { return bodyAngle; } // 车身角度获取

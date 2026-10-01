@@ -67,12 +67,6 @@ void Player::updateCooldown()
     }
 }
 
-QRect Player::getRect() const
-{
-    // 调整碰撞框大小以匹配新尺寸
-    return QRect(position.x() - 15, position.y() - 15, 30, 30);
-}
-
 void Player::update()
 {
     updateTurretAim();

@@ -233,3 +233,20 @@ TEST(PlayerMovement, CollisionBoxComesFromStats) {
     EXPECT_EQ(player.getCollisionBoxWidth(), 24);
     EXPECT_EQ(player.getCollisionBoxHeight(), 36);
 }
+
+/**
+ * 受击盒与移动探针同尺寸（D4 的「统一」）。
+ *
+ * 在此之前 `getRect()` 返回 30×30、移动探针却是 40×40 —— 子弹擦着车身飞过去不命中。
+ * 顺便钉住「以中心对齐」：盒左上角 = 位置 - 半宽/半高。
+ */
+TEST(PlayerMovement, HitBoxMatchesTheConfiguredBox) {
+    Map map;
+    tankcity::config::TankStats stats = makeStats();
+    stats.collisionBoxW = 24;
+    stats.collisionBoxH = 36;
+    Player player(&map, stats);
+    player.init(100, 200);
+
+    EXPECT_EQ(player.getRect(), QRect(100 - 12, 200 - 18, 24, 36));
+}

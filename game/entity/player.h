@@ -13,7 +13,7 @@ public:
     Player(Map *gameMap, const tankcity::config::TankStats &stats); // 修改构造函数
     void init(int x, int y);
     Bullet* shoot() override;
-    QRect getRect() const;
+    // getRect() 由 Tank 提供：受击盒与移动探针同尺寸（M3 决议 D4）
     bool canShoot() const;
     void setTurretAngle(float angle);
     void updateCooldown();

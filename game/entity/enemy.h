@@ -13,7 +13,7 @@ public:
           const tankcity::config::TankStats &stats);
     void update(const QPoint &playerPos, Map *map);
     Bullet* shoot() override;
-    QRect getRect() const;
+    // getRect() 由 Tank 提供：受击盒与移动探针同尺寸（M3 决议 D4）
     bool canShoot() const;
     void setBodyAngle(float angle) { bodyAngle = angle; }
     float getBodyAngle() const { return bodyAngle; }
