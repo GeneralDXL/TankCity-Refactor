@@ -186,10 +186,12 @@ void Enemy::calculatePath(const QPoint& playerGridPos)
         for (const auto& dir : directions) {
             QPoint neighborPos = currentNode->gridPos + dir;
 
-            // 检查邻居是否在网格范围内
+            // 检查邻居是否在网格范围内。
+            // 边界一律取自地图自身的格数：这里以前写着 30 与 22.5，
+            // 后者正是「900 / 40」的非整数格高被抄进死代码的结果。
             if (neighborPos.x() < 0 || neighborPos.y() < 0 ||
-                neighborPos.x() >= 30 ||
-                neighborPos.y() >= 22.5) {
+                neighborPos.x() >= gameMap->getGridWidth() ||
+                neighborPos.y() >= gameMap->getGridHeight()) {
                 continue;
             }
 

@@ -46,9 +46,25 @@ public:
     static const int MAP_WIDTH=1200;
     static const int MAP_HEIGHT=900;
 
-    static const int GRID_SIZE=40;
-    int getGridWidth(){return MAP_WIDTH/GRID_SIZE;}
-    int getGridHeght(){return MAP_HEIGHT/GRID_SIZE;}
+    /**
+     * 单元格边长（像素）。
+     *
+     * M3 由 **40 改为 50**：`900 / 40 = 22.5`，纵向网格非整数 —— 最后 20px 落在网格之外，
+     * A\* 甚至把这个非整数写进了死代码（`neighborPos.y() >= 22.5`）。
+     * 而 `1200 / 50 = 24`、`900 / 50 = 18`，都是整数。
+     *
+     * 为什么改格尺寸而不是改世界高度（关卡数据里 `world.height` 仍是 900）：
+     * 关卡里有 `y + h = 890` 的墙正压在底边界上，世界一变矮就必须动**几何**，
+     * 而那会破坏 `tests/data/legacy_levels.json` 的冻结快照 —— 那是 M2 用来证明
+     * 「关卡几何搬出 C++ 未失真」的物证。改格尺寸则关卡数据**一字不动**。
+     *
+     * 顺带解决一处不匹配：坦克的碰撞盒是 40×40，格子现在正好 50，见 kCellPadding。
+     */
+    static const int GRID_SIZE=50;
+
+    /// 横向 / 纵向格子数（1200/50 = 24、900/50 = 18，均为整数）
+    int getGridWidth() const { return MAP_WIDTH / GRID_SIZE; }
+    int getGridHeight() const { return MAP_HEIGHT / GRID_SIZE; }
 
     QPoint worldToGrid(const QPoint& worldPos) const;
     bool isCellWalkable(int gridX, int gridY) const;
@@ -77,7 +93,14 @@ private:
         kBlocksShot = 1u << 1,   ///< 是否挡投射物（blocks.json 的 blocksBullet）
     };
 
-    /// 「某一格能否通过」判定时的内缩像素（沿用旧实现的 5）。
+    /**
+     * 「某一格能否通过」判定时的内缩像素。
+     *
+     * 取 5 使探测盒成为 `50 - 2*5 = 40` 见方 —— **正好等于坦克的碰撞盒**：
+     * 格子内缩之后仍容得下坦克，才算这一格可通行。格尺寸是 40 时这个关系并不成立
+     * （40 内缩 5 得 30×30，比坦克还小），只能靠"贴着墙走"凑合；改成 50 之后，
+     * 「这一格能否通过」与「坦克能不能站进去」才真正是同一件事。
+     */
     static const int kCellPadding = 5;
 
     /// 由物块配置转成碰撞标记。
