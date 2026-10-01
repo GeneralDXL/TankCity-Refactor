@@ -87,11 +87,12 @@ void Player::updateTurretAim()
 
 void Player::updateMovement()
 {
-    if (moveVector.isNull()) {
-        // 没有移动时更新冷却（旧行为：冷却只在移动路径之外的地方补tick）
-        updateCooldown();
+    // 冷却每帧走一格。这一步原来藏在 `Tank::move()` 里（移动时推进、静止时由这里补），
+    // M3 步 4b 把它从 move() 移出来改成无条件推进 —— 每帧仍恰好减一次。
+    updateCooldown();
+
+    if (moveVector.isNull())
         return;
-    }
 
     // 八向归一化：数字键的斜向送来 (±1, ±1)，模长 √2 —— 不归一化的话斜着走会快 41%。
     // 归一化放在**服务端**（权威端）而不是客户端：「走多快」是规则，不是输入；

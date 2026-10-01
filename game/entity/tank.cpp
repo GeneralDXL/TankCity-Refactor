@@ -27,8 +27,10 @@ Tank::Tank(Map *gameMap, const tankcity::config::TankStats &stats)
 
 void Tank::move(float angle, float distance, Map *map)
 {
-    if (shootCooldown > 0) shootCooldown--;
-
+    // 注：射击冷却**不在这里**推进。移动函数顺手给计时器减一是个坑 ——
+    // 敌人原来绕开 move() 自己改 position，一旦改成走共享移动判定（M3 步 4b），
+    // 冷却就会一帧被减两次、射速翻倍。现在冷却统一由各自的 update() 推进。
+    //
     // 地形对移动的影响来自 blocks.json 的 moveSpeedFactor（森林 0.5、冰 1.5），
     // 无影响时为 1.0。与旧代码「只认 FOREST/ICE 两个类型」等价 —— 取倍率而不是
     // 判断类型，新增地形不必再改这里。

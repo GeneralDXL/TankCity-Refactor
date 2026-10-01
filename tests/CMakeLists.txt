@@ -27,6 +27,7 @@ add_executable(tankcity_tests
     engine_asset_test.cpp
     player_movement_test.cpp
     pathfinder_test.cpp
+    enemy_ai_test.cpp
     # 分帧器也编进测试目标（与 painter.cpp 同理）
     ${CMAKE_SOURCE_DIR}/client/net/MessageFramer.cpp
     ${CMAKE_SOURCE_DIR}/client/net/MessageParser.cpp

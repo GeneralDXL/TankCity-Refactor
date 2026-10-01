@@ -6,6 +6,8 @@
 #include "bullet.h"
 #include "config/ConfigTypes.h"
 
+#include <limits>
+
 class Enemy : public Tank
 {
 public:
@@ -27,16 +29,20 @@ public:
     int getId() const { return id; }
     void setId(int id) { this->id = id; }
 
-    // 新增寻路相关方法
     /// 求一条到玩家所在格的路径并存入 `path`。
-    /// 算法本身在 `game/world/pathfinder.h`（M3：从本类搬进 world 层）。
+    /// 算法本身在 `game/world/pathfinder.h`（M3 步 4：从本类搬进 world 层）。
     void calculatePath(const QPoint& playerGridPos);
-    bool isSafePosition(const QPoint& worldPos) const;
+
+    /// 连续多少帧没能更接近当前路径点（进度判据，见 advanceTowards）
     int stuckTimer = 0;
-    float calculateObstacleDistance(const QPoint& pos, Map* map) const;
 
 private:
     static int ID;
+
+    /// 朝 targetWorld 走一帧；被挡就按固定顺序偏转（贴墙滑动，带方向记忆）。
+    void advanceTowards(const QPoint &targetWorld, Map *map);
+    /// 换了一个路径点，进度基线重置
+    void resetWaypointProgress();
 
     int difficulty;
     int moveTimer;
@@ -44,7 +50,7 @@ private:
     int shootTimer;
     int id;
 
-    // 新增寻路相关成员变量
+    // 寻路相关
     QVector<QPoint> path;          // 存储路径点（网格坐标）
     int currentPathIndex = -1;     // 当前路径点索引
     int recalculatePathTimer = 0;  // 路径重新计算计时器
@@ -53,5 +59,12 @@ private:
     int repathIntervalTicks = 60;
     /// 卡住多久（帧）判定为需要重新寻路。来自 `ai.stuckThresholdTicks`（旧实现写死 15）。
     int stuckThresholdTicks = 15;
+
+    /// 距当前路径点"没有更近"的连续帧数（进度判据）
+    int progressTimer = 0;
+    /// 上次成功偏转的方向侧：+1 右、-1 左、0 未知/直行。用来保证滑动不来回翻转。
+    int slideSign = 0;
+    /// 走当前路径点过程中达到过的最近距离
+    double bestDistanceToWaypoint = std::numeric_limits<double>::max();
 };
 #endif // ENEMY_H
