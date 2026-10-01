@@ -3,7 +3,6 @@
 
 #include <QVector>
 #include <QRect>
-#include <QPainter>
 #include <QObject>
 #include "wall.h"
 #include "config/ConfigLoader.h"

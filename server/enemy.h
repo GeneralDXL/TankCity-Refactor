@@ -2,7 +2,6 @@
 #define ENEMY_H
 
 #include "tank.h"
-#include <QPainter>
 #include "map.h"
 #include "bullet.h"
 

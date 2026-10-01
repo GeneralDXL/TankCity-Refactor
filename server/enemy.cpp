@@ -1,6 +1,6 @@
 #include "enemy.h"
 #include "game.h"
-#include <QPainter>
+#include <QtMath>
 #include <queue>
 #include <cmath>
 #include <QRandomGenerator>

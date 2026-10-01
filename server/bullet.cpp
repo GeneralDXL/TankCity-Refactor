@@ -1,7 +1,6 @@
 #include "bullet.h"
-#include <QPainter>
+#include <QtMath>
 #include <cmath>
-#include <QPainterPath>
 
 // bullet.cpp
 Bullet::Bullet(const QPoint &position, float angle, BulletType type, double speed, int damage,
@@ -43,50 +42,6 @@ bool Bullet::isOutOfBounds(int width, int height) const
 {
     return position.x() < -20 || position.x() > width + 20 ||
            position.y() < -20 || position.y() > height + 20;
-}
-
-void Bullet::draw(QPainter &painter) const
-{
-    painter.save();
-    painter.translate(position);
-    painter.rotate(angle); // 根据子弹角度旋转
-
-    // 子弹主体 - 流线型设计
-    QPainterPath path;
-    path.moveTo(-8, 0);
-    path.lineTo(6, -3);
-    path.lineTo(6, 3);
-    path.closeSubpath();
-
-    // 子弹颜色
-    QColor bulletColor = type == BulletType::Player ?
-                             QColor(100, 255, 255) : QColor(255, 100, 100);
-
-    painter.setPen(QPen(bulletColor.darker(), 1));
-    painter.setBrush(bulletColor);
-    painter.drawPath(path);
-
-    // 弹头尖端
-    QPolygonF tip;
-    tip << QPointF(6, -3) << QPointF(10, 0) << QPointF(6, 3);
-    painter.setBrush(bulletColor.lighter(150));
-    painter.drawPolygon(tip);
-
-    painter.restore();
-
-    // 绘制尾迹
-    QPoint prevPos = position;
-    prevPos.rx() -= 12 * cos(angle * M_PI / 180.0f);
-    prevPos.ry() -= 12 * sin(angle * M_PI / 180.0f);
-
-    QRadialGradient grad(prevPos, 8);
-    grad.setColorAt(0, type == BulletType::Player ?
-                           QColor(100, 255, 255, 150) : QColor(255, 100, 100, 150));
-    grad.setColorAt(1, Qt::transparent);
-
-    painter.setBrush(grad);
-    painter.setPen(Qt::NoPen);
-    painter.drawEllipse(prevPos, 6, 6);
 }
 
 QRect Bullet::getRect() const

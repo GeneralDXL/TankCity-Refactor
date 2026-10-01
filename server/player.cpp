@@ -1,5 +1,5 @@
 #include "player.h"
-#include <QPainter>
+#include <QtMath>
 #include "bullet.h"
 #include <QDebug>
 #include <cmath>

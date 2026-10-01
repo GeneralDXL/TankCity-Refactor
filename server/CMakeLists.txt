@@ -1,6 +1,7 @@
 # 服务端：权威游戏逻辑
 
-find_package(Qt6 REQUIRED COMPONENTS Core Network Widgets)
+# 只依赖 Core / Network：服务端不绘制，Widgets（乃至 Gui）都不该出现在这里
+find_package(Qt6 REQUIRED COMPONENTS Core Network)
 
 qt_add_executable(tankcity_server
     main.cpp
@@ -25,7 +26,6 @@ qt_add_executable(tankcity_server
 target_link_libraries(tankcity_server PRIVATE
     Qt6::Core
     Qt6::Network
-    Qt6::Widgets
     tankcity_shared   # 关卡/配置模型：assets/levels/*.json 的加载器
 )
 

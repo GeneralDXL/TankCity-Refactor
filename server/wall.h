@@ -9,7 +9,6 @@
 #define ICE 5
 
 #include <QRect>
-#include <QPainter>
 #include "config/ConfigTypes.h"
 
 class Wall : public QRect{

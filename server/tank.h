@@ -4,7 +4,6 @@
 #include "map.h"
 #include "bullet.h"
 #include "config/TankStats.h"
-#include <QVector2D>
 #include <QObject>
 
 enum Direction {

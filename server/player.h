@@ -2,7 +2,6 @@
 #define PLAYER_H
 
 #include "tank.h"
-#include <QPainter>
 #include "bullet.h"
 #include "map.h"
 #include <QSet>

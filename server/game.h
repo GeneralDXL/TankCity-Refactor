@@ -2,8 +2,6 @@
 #define GAMEWINDOW_H
 
 #include <QTimer>
-#include <QPainter>
-#include <QKeyEvent>
 #include <QVector>
 #include <QSet>
 #include "player.h"

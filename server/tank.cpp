@@ -1,4 +1,5 @@
 #include "tank.h"
+#include <QtMath>
 #include <QDebug>
 
 Tank::Tank(Map *gameMap, const tankcity::config::TankStats &stats)
