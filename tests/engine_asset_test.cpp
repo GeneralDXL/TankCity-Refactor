@@ -50,6 +50,38 @@ TEST(EngineAssetPaths, RelativeRootIsConfigurableSoAssetsCanShipNextToTheExe)
               QStringLiteral("C:/game/assets/images/textures/ice.jpg"));
 }
 
+TEST(EngineAssetPaths, DataLivesNextToTheExecutableNotAtTheRepositoryRoot)
+{
+    // 可变数据放在 exe 旁边：正好等于开发期的 build/bin/data，既有账号/分数无需迁移。
+    EXPECT_EQ(engine::asset::dataRootFrom(QStringLiteral("C:/repo/build/bin")),
+              QStringLiteral("C:/repo/build/bin/data"));
+    EXPECT_EQ(engine::asset::dataPathFrom(QStringLiteral("C:/repo/build/bin"),
+                                          QStringLiteral("accounts.txt")),
+              QStringLiteral("C:/repo/build/bin/data/accounts.txt"));
+    EXPECT_EQ(engine::asset::dataPathFrom(QStringLiteral("C:/repo/build/bin"),
+                                          QStringLiteral("scores.txt")),
+              QStringLiteral("C:/repo/build/bin/data/scores.txt"));
+}
+
+TEST(EngineAssetPaths, AssetsAndDataAreDeliberatelyInDifferentPlaces)
+{
+    const QString exeDir = QStringLiteral("C:/repo/build/bin");
+
+    // 故意写在一起：assets 在仓库根（只读、随源码走），data 在 exe 旁（可写、随程序走）。
+    // 谁要是"顺手统一"成同一个根，这条用例会失败。
+    EXPECT_EQ(engine::asset::assetRootFrom(exeDir), QStringLiteral("C:/repo/assets"));
+    EXPECT_EQ(engine::asset::dataRootFrom(exeDir), QStringLiteral("C:/repo/build/bin/data"));
+    EXPECT_NE(engine::asset::assetRootFrom(exeDir), engine::asset::dataRootFrom(exeDir));
+}
+
+TEST(EngineAssetPaths, DataDirIsConfigurableForPackaging)
+{
+    EXPECT_EQ(engine::asset::dataPathFrom(QStringLiteral("C:/game"),
+                                          QStringLiteral("accounts.txt"),
+                                          QStringLiteral("userdata")),
+              QStringLiteral("C:/game/userdata/accounts.txt"));
+}
+
 TEST(EngineAssetPaths, TheOldWorkingDirectoryRelativeFormWouldNotSurviveThisTest)
 {
     // 反面对照：搬迁前的写法是 "./../../assets/images/ui/theme.png"，它只相对 **cwd** 成立。

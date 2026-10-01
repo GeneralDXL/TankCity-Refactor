@@ -6,9 +6,6 @@
 #include <QPixmap>
 
 
-// 静态成员初始化
-QString LoginWindow::accountsFilePath = "data/accounts.txt";
-
 LoginWindow::LoginWindow(QWidget *parent)
     : QWidget(parent)
 {
@@ -21,10 +18,7 @@ LoginWindow::LoginWindow(QWidget *parent)
         setStyleSheet("color: #ecf0f1;");  // 只保留文字颜色样式
     }
     // 创建数据目录
-    QDir dir;
-    if (!dir.exists("data")) {
-        dir.mkdir("data");
-    }
+    QDir().mkpath(engine::asset::dataRoot());
 
     setWindowTitle("坦克大战 - 登录");
     setFixedSize(800, 700);
@@ -141,7 +135,7 @@ void LoginWindow::onRegistrationSuccess(const QString &username, const QString &
 // 静态方法实现
 bool LoginWindow::validateCredentials(const QString &username, const QString &password)
 {
-    QString filePath = "data/accounts.txt";
+    QString filePath = engine::asset::dataPath("accounts.txt");
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         qDebug() << "无法打开账户文件:" << file.errorString();
@@ -183,7 +177,7 @@ void LoginWindow::paintEvent(QPaintEvent *event)
 }
 void LoginWindow::saveCredentials(const QString &username, const QString &password)
 {
-    QString filePath = "data/accounts.txt";
+    QString filePath = engine::asset::dataPath("accounts.txt");
     QFile file(filePath);
     if (!file.open(QIODevice::Append | QIODevice::Text)) {
         qDebug() << "无法保存账户信息:" << file.errorString();

@@ -24,7 +24,6 @@ public:
 
     static bool validateCredentials(const QString &username, const QString &password);
     static void saveCredentials(const QString &username, const QString &password);
-    static QString accountsFilePath;
 
 protected:
     void paintEvent(QPaintEvent *event) override;

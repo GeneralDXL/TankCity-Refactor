@@ -52,10 +52,7 @@ MainWindow::MainWindow(const QString &username, QWidget *parent)
     setWindowTitle("坦克大战");
     setFixedSize(1200, 900);
     // 创建数据目录
-    QDir dir;
-    if (!dir.exists("data")) {
-        dir.mkdir("data");
-    }
+    QDir().mkpath(engine::asset::dataRoot());
 
     stackedWidget = new QStackedWidget(this);
     setCentralWidget(stackedWidget);
@@ -550,7 +547,7 @@ void MainWindow::onBackToMenu()
 void MainWindow::onGameFinished(int score)
 {
     // 保存分数
-    QFile file("data/scores.txt");
+    QFile file(engine::asset::dataPath("scores.txt"));
     if (file.open(QIODevice::Append | QIODevice::Text)) {
         QTextStream out(&file);
         out << currentUsername << ":" << score << "\n";

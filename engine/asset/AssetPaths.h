@@ -31,6 +31,28 @@ QString assetRoot(const QString &relativeRoot = kDefaultRelativeRoot);
 QString assetPath(const QString &relativePath,
                   const QString &relativeRoot = kDefaultRelativeRoot);
 
+/// 可变运行时数据目录相对**可执行文件目录**的位置（账号、分数）。
+inline constexpr const char *kDefaultDataDir = "data";
+
+/**
+ * 可变运行时数据（`accounts.txt` / `scores.txt`）的定位。
+ *
+ * 为什么与 assets 分开写：这个目录**会被写入**，里面是用户数据 ——
+ * 定位错了不只是"显示不出来"，而是**读不到旧账号、还会就地凭空造一个空目录**。
+ *
+ * 搬迁前这里用的是 `"data/accounts.txt"` 这种 cwd 相对路径。之所以一直没暴露，
+ * 是因为 assets 逼着大家只能在 `build/bin` 下启动，歪打正着成立；assets 改成按
+ * 可执行文件定位之后，这个隐藏依赖立刻显形。
+ *
+ * 默认位置是**可执行文件旁边**（`<exe>/data`）—— 正好等于开发期的
+ * `build/bin/data`，所以既有账号与分数**无需迁移**；打包时也保持自包含。
+ */
+QString dataRootFrom(const QString &applicationDir, const QString &dataDir = kDefaultDataDir);
+QString dataPathFrom(const QString &applicationDir, const QString &relativePath,
+                     const QString &dataDir = kDefaultDataDir);
+QString dataRoot(const QString &dataDir = kDefaultDataDir);
+QString dataPath(const QString &relativePath, const QString &dataDir = kDefaultDataDir);
+
 } // namespace engine::asset
 
 #endif // ENGINE_ASSET_ASSETPATHS_H

@@ -28,4 +28,25 @@ QString assetPath(const QString &relativePath, const QString &relativeRoot)
     return assetPathFrom(QCoreApplication::applicationDirPath(), relativePath, relativeRoot);
 }
 
+QString dataRootFrom(const QString &applicationDir, const QString &dataDir)
+{
+    return QDir::cleanPath(QDir(applicationDir).filePath(dataDir));
+}
+
+QString dataPathFrom(const QString &applicationDir, const QString &relativePath,
+                     const QString &dataDir)
+{
+    return QDir(dataRootFrom(applicationDir, dataDir)).filePath(relativePath);
+}
+
+QString dataRoot(const QString &dataDir)
+{
+    return dataRootFrom(QCoreApplication::applicationDirPath(), dataDir);
+}
+
+QString dataPath(const QString &relativePath, const QString &dataDir)
+{
+    return dataPathFrom(QCoreApplication::applicationDirPath(), relativePath, dataDir);
+}
+
 } // namespace engine::asset

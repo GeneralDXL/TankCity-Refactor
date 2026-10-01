@@ -91,7 +91,7 @@ void ScoreBoard::loadScores()
     scores.clear();
 
 
-    QFile file("data/scores.txt");
+    QFile file(engine::asset::dataPath("scores.txt"));
     if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         QTextStream in(&file);
         while (!in.atEnd()) {
