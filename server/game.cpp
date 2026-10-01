@@ -296,17 +296,14 @@ void Game::handlePlayerInput(int clientId, const QJsonObject &input)
     
     auto player = players[clientId];
     
-    // 处理按键输入
-    QJsonObject keys = input["keys"].toObject();
-    player->setMoveForward(keys["w"].toBool());
-    player->setMoveBackward(keys["s"].toBool());
-    player->setTurnLeft(keys["a"].toBool());
-    player->setTurnRight(keys["d"].toBool());
+    // 双摇杆（M3）：上行只送两个向量 —— 往哪走、瞄哪。这里不判断「哪个键是前进」，
+    // 玩法解释全在 Player 里（协议见 docs/plans/M3-世界与玩法重构草案.md 决议 D2）。
+    const QJsonObject moveObj = input["move"].toObject();
+    player->setMoveVector(QPointF(moveObj["x"].toDouble(), moveObj["y"].toDouble()));
     
     // 处理鼠标位置
-    QJsonObject mouse = input["mousePos"].toObject();
-    QPoint mousePos(mouse["x"].toInt(), mouse["y"].toInt());
-    player->setTurretTarget(mousePos);
+    const QJsonObject aimObj = input["aim"].toObject();
+    player->setAimPoint(QPoint(aimObj["x"].toInt(), aimObj["y"].toInt()));
     
     // 处理射击
     if (input["shoot"].toBool() && player->canShoot()) {

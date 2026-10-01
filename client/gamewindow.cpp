@@ -565,17 +565,20 @@ void GameWindow::sendKey()
     // 取一次快照：主键的待发标记在这一步被取走 —— 这就是「长按不连发」的实现。
     const engine::input::InputTracker::Snapshot snapshot = inputTracker_.takeSnapshot();
 
-    QJsonObject keys;
-    keys["w"] = snapshot.keysDown.contains(Qt::Key_W);
-    keys["a"] = snapshot.keysDown.contains(Qt::Key_A);
-    keys["s"] = snapshot.keysDown.contains(Qt::Key_S);
-    keys["d"] = snapshot.keysDown.contains(Qt::Key_D);
-    input["keys"] = keys;
+    // 左摇杆：八向方向向量，分量只取 -1/0/1 —— 「走多快」是服务端的规则
+    // （含斜向归一化），客户端不参与。屏幕 y 向下，与世界 y 同向，故 S/W 直接映射。
+    QJsonObject moveObj;
+    moveObj["x"] = (snapshot.keysDown.contains(Qt::Key_D) ? 1 : 0)
+                   - (snapshot.keysDown.contains(Qt::Key_A) ? 1 : 0);
+    moveObj["y"] = (snapshot.keysDown.contains(Qt::Key_S) ? 1 : 0)
+                   - (snapshot.keysDown.contains(Qt::Key_W) ? 1 : 0);
+    input["move"] = moveObj;
 
-    QJsonObject mousePosObj;
-    mousePosObj["x"] = snapshot.pointer.x();
-    mousePosObj["y"] = snapshot.pointer.y();
-    input["mousePos"] = mousePosObj;
+    // 右摇杆：瞄准点（当前视图与世界 1:1，无镜头，故直接用窗口坐标）
+    QJsonObject aimObj;
+    aimObj["x"] = snapshot.pointer.x();
+    aimObj["y"] = snapshot.pointer.y();
+    input["aim"] = aimObj;
     
     // 边沿触发：待发标记已在取快照时清除，所以一次点击只发一次 true（长按不连发）。
     input["shoot"] = snapshot.primaryPressed;
