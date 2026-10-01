@@ -1,5 +1,4 @@
 #include "enemy.h"
-#include "game.h"
 #include <QtMath>
 #include <queue>
 #include <cmath>

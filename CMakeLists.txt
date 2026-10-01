@@ -31,6 +31,7 @@ endif()
 include(CTest)  # 定义 BUILD_TESTING（默认 ON）并启用测试
 
 add_subdirectory(shared)  # 配置模型与加载器（被 client/server/tests 共用）
+add_subdirectory(game)    # 实体与世界（当前只被 server 链接，见 M1.1 决议 D4）
 add_subdirectory(client)
 add_subdirectory(server)
 

@@ -5,9 +5,6 @@
 #include "map.h"
 #include "bullet.h"
 
-// 添加前向声明
-class GameWindow;
-
 class Enemy : public Tank
 {
 public:

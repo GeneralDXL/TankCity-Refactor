@@ -7,18 +7,6 @@ qt_add_executable(tankcity_server
     main.cpp
     game.cpp
     game.h
-    player.cpp
-    player.h
-    enemy.cpp
-    enemy.h
-    bullet.cpp
-    bullet.h
-    tank.cpp
-    tank.h
-    map.cpp
-    map.h
-    wall.cpp
-    wall.h
     server.cpp
     server.h
 )
@@ -26,7 +14,8 @@ qt_add_executable(tankcity_server
 target_link_libraries(tankcity_server PRIVATE
     Qt6::Core
     Qt6::Network
-    tankcity_shared   # 关卡/配置模型：assets/levels/*.json 的加载器
+    tankcity_game     # 实体与世界（M1.1 从 server/ 提升为独立层）
+    tankcity_shared   # 关卡/配置模型：assets/levels/*.json 的加载器（由 game 传递依赖）
 )
 
 # Windows 特定定义（Winsock 2 / 避免 min/max 宏冲突）
