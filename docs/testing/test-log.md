@@ -127,3 +127,57 @@
 2. **贴图由「每帧解码」改为「只加载一次」后画面无变化**。
 
 > ⚠️ **残余覆盖缺口**：这三个场景只用到 **边界 / steel / brick** 三种贴图；`assets/images/textures/` 里的 **forest / sea / ice** 未被这次比对覆盖（它们出现在第 5/6/7/10 关）。建议补一张**第 10 关「环形孤岛」**的截图 —— 该关同时含 ice + sea + forest + steel（33 个阻挡物 + 4 个 overlay），**一张即可补齐三种未覆盖贴图**。
+
+---
+
+## M1.1 引擎分层：阶段验收（2026-10-01）
+
+> 分支 `feat/m1.1-engine-layer`，**17 个提交**；方案与决议见 `docs/plans/M1.1-引擎分层草案.md`（本地）。
+> 逐步骤的人工试玩由 GeneralDXL 执行，结果已记录在上方各行。
+
+### DoD 逐条自查
+
+| # | 验收标准 | 结果 |
+|---|---|---|
+| 1 | `engine/` 内不出现游戏领域标识 | ✅ 无（排除 `tankcity` 项目前缀后为空） |
+| 2 | `engine/` 不反向依赖 `game/` `client/` `server/` `shared/` | ✅ 无 |
+| 3 | 服务端不依赖 `Qt6::Widgets` | ✅ 链接行只剩 `Qt6Network + Qt6Core`；`QPainter` 在服务端绝迹（源码与头文件均无） |
+| 4 | `ctest` 全绿（既有 + 新增） | ✅ 1/1；**106 个用例 / 21 套件**（M1.1 开工时为 54 个） |
+| 5 | 可玩性与基线一致 | ✅ 三张基线截图逐张比对**无渲染差异**（差异仅为取景时机/游戏进程）；各步骤试玩均无异常 |
+| 6 | M2 的 DoD 5 未被破坏 | ✅ `LevelList.NewLevelFileAppearsWithoutCppChange` 通过 |
+| 7 | 已知偏差**不顺手修** | ✅ 血条「10%」口径原样保留（`getHealth() * 50 / 100` 与 `arg(getHealth())` 均未动） |
+| 8 | 每个提交单独可编译、`ctest` 可过 | ✅ 每个提交后均执行构建 + `ctest` |
+| 9 | 无新增编译警告 | ✅ 逐次构建零警告；服务端是控制台程序，警告可见 |
+
+### 成果：新增的 engine 层模块
+
+| 模块 | 内容 | 消费者 |
+|---|---|---|
+| `engine/core` | `GameLoop` + `kTickMs`（「一帧」的唯一定义） | 服务端逻辑循环、客户端上行定时器 |
+| `engine/physics` | `Aabb` / `Grid` / `CollisionWorld` | `Map` 的几何查询 |
+| `engine/render` | `IRenderer` / `QPainterBackend` / `TextureCache` | 客户端地图绘制 |
+| `engine/input` | `InputTracker` | 客户端输入采集 |
+| `engine/asset` | `AssetPaths`（资源与运行时数据的定位） | 客户端与服务端 |
+
+另：`server/` 的实体与世界提升为独立的 `game` 层（`tankcity_game`）；客户端协议相关的代码归入 `client/net/` 与 `client/render/`。
+
+### 与计划的偏离（3 处，均已在方案文档记录理由）
+
+1. **提交 8 拆成 3 个**（输入容器 / 收包分帧 / 字段解析）——`onReadyRead` 那 285 行风险集中，拆分以换取 `git bisect` 粒度；
+2. **`engine/render` 收窄**：`IRenderer` 只声明地图真正需要的两个原语，不做 `QPainter` 的完整镜像；
+3. **`engine/ui` 与 HUD 抽取推迟到 M6**：M6 本就要重做 HUD（含血条尺度）与菜单栈，现在搬一次、M6 再改写一次属负收益，且没有任何 DoD 依赖它。
+
+### 顺带修复的既有缺陷（本轮发现，非本轮引入）
+
+1. **收包路径两处缺陷**：GUI 线程里 `waitForReadyRead(100)` 阻塞（最长卡窗口 100ms）；等待失败时长度头已被吃掉、**流就此错位**；
+2. **`Wall::takeDamage()` 里的 `delete this`**：作用在 `QVector<Wall>` 的值元素上，未定义行为，且从未被调用（死代码地雷）；
+3. **`LoginWindow::accountsFilePath`**：未使用的静态 `QString`，其初始化会在 `main()` 之前调用 `applicationDirPath()`；
+4. **`data/` 目录的 cwd 依赖**：换工作目录启动会「读不到账号 + 就地凭空造一个空 `data/`」（由 GeneralDXL 试玩发现）。
+
+### 明确留给后续的既有缺陷（本轮**原样保留**，改它会改变画面）
+
+| 缺陷 | 归属 |
+|---|---|
+| **子弹颜色恒为敌人色**：`game_state` 发 `type`、客户端读 `type1`（`server/game.cpp:798` ↔ 客户端解析器） | M5 协议统一 |
+| **敌人难度配色从未生效**：`broadcastGameState` 的敌人对象未带 `difficulty`，而客户端每帧整体重建敌人 | M5 协议统一 |
+| 血条尺度与「10%」显示口径 | M6 表现层 |
