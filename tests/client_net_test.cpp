@@ -15,6 +15,7 @@
 #include <QtEndian>
 
 #include "net/MessageFramer.h"
+#include "net/MessageParser.h"
 
 namespace {
 
@@ -162,4 +163,138 @@ TEST(ClientNetMessageFramer, ClearDropsAHalfReceivedMessage)
     framer.append(message);   // 重连后从头来
     EXPECT_EQ(framer.take(out), client::net::MessageFramer::Status::Ok);
     EXPECT_EQ(out["type"].toString(), QStringLiteral("player_init"));
+}
+
+// ---------------------------------------------------------------------------
+// 字段解析：JSON 形状照抄服务器真实下发的内容
+// ---------------------------------------------------------------------------
+
+TEST(ClientNetMessageParser, PlayerTankFields)
+{
+    const QJsonObject json{
+        {"type", "player_init"},
+        {"id", 3},
+        {"position", QJsonObject{{"x", 120}, {"y", 340}}},
+        {"bodyAngle", 90.0},
+        {"turretAngle", 45.5},
+        {"health", 10},
+    };
+
+    const client::net::TankState state = client::net::parseTank(json);
+
+    EXPECT_EQ(state.id, 3);
+    EXPECT_EQ(state.position, QPoint(120, 340));
+    EXPECT_DOUBLE_EQ(state.bodyAngle, 90.0);
+    EXPECT_DOUBLE_EQ(state.turretAngle, 45.5);
+    EXPECT_EQ(state.health, 10);
+    EXPECT_EQ(state.difficulty, 0) << "玩家消息里没有难度字段，应为默认值";
+}
+
+TEST(ClientNetMessageParser, EnemyTankCarriesDifficulty)
+{
+    const QJsonObject json{
+        {"type", "enemy_init"},
+        {"id", 7},
+        {"difficulty", 2},
+        {"position", QJsonObject{{"x", 5}, {"y", 6}}},
+        {"bodyAngle", 180.0},
+        {"turretAngle", 270.0},
+        {"health", 4},
+    };
+
+    const client::net::TankState state = client::net::parseTank(json);
+
+    EXPECT_EQ(state.id, 7);
+    EXPECT_EQ(state.difficulty, 2);
+    EXPECT_EQ(state.position, QPoint(5, 6));
+    EXPECT_EQ(state.health, 4);
+}
+
+TEST(ClientNetMessageParser, WallFieldsComeFromPositionAndSizePairs)
+{
+    const QJsonObject json{
+        {"position", QJsonObject{{"x", 10}, {"y", 20}}},
+        {"size", QJsonObject{{"width", 30}, {"height", 40}}},
+        {"type", 1},
+        {"id", 42},
+    };
+
+    const client::net::WallState state = client::net::parseWall(json);
+
+    EXPECT_EQ(state.rect, QRect(10, 20, 30, 40));
+    EXPECT_EQ(state.type, 1);
+    EXPECT_EQ(state.id, 42);
+}
+
+TEST(ClientNetMessageParser, ItemFieldsUseTheItemTypeField)
+{
+    const QJsonObject json{
+        {"id", 11},
+        {"x", 500},
+        {"y", 600},
+        {"item_type", 3},
+    };
+
+    const client::net::ItemState state = client::net::parseItem(json);
+
+    EXPECT_EQ(state.id, 11);
+    EXPECT_EQ(state.x, 500);
+    EXPECT_EQ(state.y, 600);
+    EXPECT_EQ(state.type, 3);
+}
+
+/**
+ * 把「子弹颜色恒为敌人色」这个既有缺陷的行为钉住。
+ *
+ * 两种真实报文都试一遍，期望都是 `fromPlayer == false`：
+ *  - 每帧的 game_state 发的是 `type: "player"` —— 客户端读的是 `type1`，读不到；
+ *  - 敌人开火那条发的是 `type1: 1`（整数）—— 客户端按字符串读，同样读不到。
+ *
+ * 这条用例的价值不是"正确"，而是**显式记录现状**：等 M5 统一协议时，
+ * 这里会随字段名一起改，届时测试失败即提醒「画面要变了」。
+ */
+TEST(ClientNetMessageParser, FromPlayerIsAlwaysFalseWithTheCurrentServerFields)
+{
+    const QJsonObject gameStateBullet{
+        {"position", QJsonObject{{"x", 1}, {"y", 2}}},
+        {"angle", 30.0},
+        {"type", "player"},   // 服务器实际发的字段
+    };
+    EXPECT_FALSE(client::net::parseBullet(gameStateBullet).fromPlayer)
+        << "客户端读 type1，而服务器发 type —— 玩家子弹也会被画成敌人色（M5 修）";
+
+    const QJsonObject enemyFireBullet{
+        {"position", QJsonObject{{"x", 3}, {"y", 4}}},
+        {"angle", 60.0},
+        {"type1", 1},          // 敌人开火那条发的是整数
+    };
+    EXPECT_FALSE(client::net::parseBullet(enemyFireBullet).fromPlayer)
+        << "type1 是整数，按字符串读仍为空";
+}
+
+TEST(ClientNetMessageParser, BulletPositionAndAngleAreRead)
+{
+    const QJsonObject json{
+        {"position", QJsonObject{{"x", 777}, {"y", 888}}},
+        {"angle", 123.5},
+    };
+
+    const client::net::BulletState state = client::net::parseBullet(json);
+
+    EXPECT_EQ(state.position, QPoint(777, 888));
+    EXPECT_DOUBLE_EQ(state.angle, 123.5);
+}
+
+TEST(ClientNetMessageParser, MissingFieldsFallBackToDefaultsInsteadOfCrashing)
+{
+    const QJsonObject empty;
+
+    const client::net::TankState tank = client::net::parseTank(empty);
+    EXPECT_EQ(tank.id, 0);
+    EXPECT_EQ(tank.position, QPoint(0, 0));
+    EXPECT_EQ(tank.health, 0);
+
+    EXPECT_EQ(client::net::parseWall(empty).rect, QRect(0, 0, 0, 0));
+    EXPECT_EQ(client::net::parseBullet(empty).position, QPoint(0, 0));
+    EXPECT_EQ(client::net::parseItem(empty).id, 0);
 }

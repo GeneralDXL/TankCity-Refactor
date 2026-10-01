@@ -1,6 +1,7 @@
 #include "gamewindow.h"
 
 #include "core/GameLoop.h"   // engine/core：kTickMs
+#include "net/MessageParser.h"
 #include "render/QPainterBackend.h"
 #include <QPainter>
 #include <QMessageBox>
@@ -271,15 +272,15 @@ void GameWindow::onReadyRead()
         if (type == "player_init")
         {
             qDebug() << "Received player tank update\n";
-            // 更新玩家坦克状态
+            // 更新玩家坦克状态（字段名集中在 client/net/MessageParser）
+            const client::net::TankState state = client::net::parseTank(json);
             PlayerPainter *player = new PlayerPainter(playerTankStats());
-            player->setPosition(QPoint(json["position"].toObject()["x"].toInt(),
-                                       json["position"].toObject()["y"].toInt()));
+            player->setPosition(state.position);
             qDebug() << "Player position:" << player->getPosition() << '\n';
-            player->setBodyAngle(json["bodyAngle"].toDouble());
-            player->setTurretAngle(json["turretAngle"].toDouble());
-            player->setHealth(json["health"].toInt());
-            player->setId(json["id"].toInt());
+            player->setBodyAngle(state.bodyAngle);
+            player->setTurretAngle(state.turretAngle);
+            player->setHealth(state.health);
+            player->setId(state.id);
 
             players.insert(player->getId(), std::shared_ptr<PlayerPainter>(player));
 
@@ -297,16 +298,14 @@ void GameWindow::onReadyRead()
         {
             qDebug() << "Received enemy tank update\n";
             // 更新敌人坦克状态
-            int enemyId = json["id"].toInt();
-            EnemyPainter *enemy = new EnemyPainter(json["difficulty"].toInt(),
-                                                    enemyTankStats(json["difficulty"].toInt()));
-            enemy->setPosition(QPoint(json["position"].toObject()["x"].toInt(),
-                                       json["position"].toObject()["y"].toInt()));
-            
-            enemy->setBodyAngle(json["bodyAngle"].toDouble());
-            enemy->setTurretAngle(json["turretAngle"].toDouble());
-            enemy->setHealth(json["health"].toInt());
-            enemy->setId(enemyId);
+            const client::net::TankState state = client::net::parseTank(json);
+            EnemyPainter *enemy = new EnemyPainter(state.difficulty,
+                                                    enemyTankStats(state.difficulty));
+            enemy->setPosition(state.position);
+            enemy->setBodyAngle(state.bodyAngle);
+            enemy->setTurretAngle(state.turretAngle);
+            enemy->setHealth(state.health);
+            enemy->setId(state.id);
 
             enemies.push_back(std::shared_ptr<EnemyPainter>(enemy));
 
@@ -325,10 +324,10 @@ void GameWindow::onReadyRead()
         } 
 		else if (type == "bullet_created") 
 		{
-            BulletPainter *bullet = new BulletPainter(QPoint(json["position"].toObject()["x"].toInt(),
-                                                             json["position"].toObject()["y"].toInt()),
-                                                       json["angle"].toDouble(),
-                                                       json["type1"].toString() == "player" ? BulletPainterType::Player : BulletPainterType::Enemy);
+            const client::net::BulletState state = client::net::parseBullet(json);
+            BulletPainter *bullet = new BulletPainter(
+                state.position, state.angle,
+                state.fromPlayer ? BulletPainterType::Player : BulletPainterType::Enemy);
             bullets.push_back(std::make_shared<BulletPainter>(*bullet));                                           
         }
          else if (type == "delete_wall")
@@ -358,14 +357,10 @@ void GameWindow::onReadyRead()
 
             for (const QJsonValue &wallValue : wallArray)
             {
-                QJsonObject wallObj = wallValue.toObject();
-                WallPainter wall(wallObj["position"].toObject()["x"].toInt(),
-                                 wallObj["position"].toObject()["y"].toInt(),
-                                 wallObj["size"].toObject()["width"].toInt(),
-                                 wallObj["size"].toObject()["height"].toInt(),
-                                 wallObj["type"].toInt(),
-                                 wallObj["id"].toInt());
-                gameMap->addWall(wall);
+                const client::net::WallState state = client::net::parseWall(wallValue.toObject());
+                gameMap->addWall(WallPainter(state.rect.x(), state.rect.y(),
+                                             state.rect.width(), state.rect.height(),
+                                             state.type, state.id));
             }
 
         }
@@ -402,45 +397,40 @@ void GameWindow::onReadyRead()
 
             for (const QJsonValue &playerValue : playerArray)
             {
-                QJsonObject playerObj = playerValue.toObject();
-                int playerId = playerObj["id"].toInt();
+                const client::net::TankState state = client::net::parseTank(playerValue.toObject());
 
-                if (players.contains(playerId))
+                if (players.contains(state.id))
                 {
-                    PlayerPainter *player = players[playerId].get();
-                    player->setPosition(QPoint(playerObj["position"].toObject()["x"].toInt(),
-                                               playerObj["position"].toObject()["y"].toInt()));
-                    player->setBodyAngle(playerObj["bodyAngle"].toDouble());
-                    player->setTurretAngle(playerObj["turretAngle"].toDouble());
-                    player->setHealth(playerObj["health"].toInt());
+                    PlayerPainter *player = players[state.id].get();
+                    player->setPosition(state.position);
+                    player->setBodyAngle(state.bodyAngle);
+                    player->setTurretAngle(state.turretAngle);
+                    player->setHealth(state.health);
 
                 }else
                 {
                     PlayerPainter *newPlayer = new PlayerPainter(playerTankStats());
-                    newPlayer->setPosition(QPoint(playerObj["position"].toObject()["x"].toInt(),
-                                                  playerObj["position"].toObject()["y"].toInt()));
-                    newPlayer->setBodyAngle(playerObj["bodyAngle"].toDouble());
-                    newPlayer->setTurretAngle(playerObj["turretAngle"].toDouble());
-                    newPlayer->setHealth(playerObj["health"].toInt());
-                    newPlayer->setId(playerId);
-                    players.insert(playerId, std::shared_ptr<PlayerPainter>(newPlayer));
+                    newPlayer->setPosition(state.position);
+                    newPlayer->setBodyAngle(state.bodyAngle);
+                    newPlayer->setTurretAngle(state.turretAngle);
+                    newPlayer->setHealth(state.health);
+                    newPlayer->setId(state.id);
+                    players.insert(state.id, std::shared_ptr<PlayerPainter>(newPlayer));
                 }
             }
             QJsonArray enemyArray = json["enemies"].toArray();
             enemies.clear();
             for (const QJsonValue &enemyValue : enemyArray)
             {
-                QJsonObject enemyObj = enemyValue.toObject();
-                
-                int enemyId = enemyObj["id"].toInt();
-                EnemyPainter *newEnemy = new EnemyPainter(enemyObj["difficulty"].toInt(),
-                                                          enemyTankStats(enemyObj["difficulty"].toInt()));
-                newEnemy->setPosition(QPoint(enemyObj["position"].toObject()["x"].toInt(),
-                                                enemyObj["position"].toObject()["y"].toInt()));
-                newEnemy->setBodyAngle(enemyObj["bodyAngle"].toDouble());
-                newEnemy->setTurretAngle(enemyObj["turretAngle"].toDouble());
-                newEnemy->setHealth(enemyObj["health"].toInt());
-                newEnemy->setId(enemyId);
+                const client::net::TankState state = client::net::parseTank(enemyValue.toObject());
+
+                EnemyPainter *newEnemy = new EnemyPainter(state.difficulty,
+                                                          enemyTankStats(state.difficulty));
+                newEnemy->setPosition(state.position);
+                newEnemy->setBodyAngle(state.bodyAngle);
+                newEnemy->setTurretAngle(state.turretAngle);
+                newEnemy->setHealth(state.health);
+                newEnemy->setId(state.id);
                 enemies.push_back(std::shared_ptr<EnemyPainter>(newEnemy));
             }
             QJsonArray bulletArray = json["bullets"].toArray();
@@ -448,25 +438,22 @@ void GameWindow::onReadyRead()
 
             for (const QJsonValue &bulletValue : bulletArray)
             {
-                QJsonObject bulletObj = bulletValue.toObject();
-                auto bullet = std::make_shared<BulletPainter>(QPoint(bulletObj["position"].toObject()["x"].toInt(),
-                                                bulletObj["position"].toObject()["y"].toInt()),
-                                                bulletObj["angle"].toDouble(),
-                                                bulletObj["type1"].toString() == "player" ? BulletPainterType::Player : BulletPainterType::Enemy);
-                bullets.push_back(bullet);
+                const client::net::BulletState state = client::net::parseBullet(bulletValue.toObject());
+                bullets.push_back(std::make_shared<BulletPainter>(
+                    state.position, state.angle,
+                    state.fromPlayer ? BulletPainterType::Player : BulletPainterType::Enemy));
             }
             score = json["score"].toInt();
 
             QJsonArray itemArray = json["items"].toArray();
             items.clear();
             for (const QJsonValue &itemValue : itemArray) {
-                QJsonObject itemObj = itemValue.toObject();
-                int itemId = itemObj["id"].toInt();
+                const client::net::ItemState state = client::net::parseItem(itemValue.toObject());
                 Item *newitem = new Item;
-                newitem->id = itemId;
-                newitem->x = itemObj["x"].toInt();
-                newitem->y = itemObj["y"].toInt();
-                newitem->type = static_cast<ItemType>(itemObj["item_type"].toInt());
+                newitem->id = state.id;
+                newitem->x = state.x;
+                newitem->y = state.y;
+                newitem->type = static_cast<ItemType>(state.type);
                 items.push_back(std::shared_ptr<Item>(newitem));
             }
         }
@@ -489,11 +476,12 @@ void GameWindow::onReadyRead()
             }
         }
         else if (type == "item_spawned") {
+            const client::net::ItemState state = client::net::parseItem(json);
             std::shared_ptr<Item> item = std::make_shared<Item>();
-            item->id = json["id"].toInt();
-            item->x = json["x"].toInt();
-            item->y = json["y"].toInt();
-            item->type = static_cast<ItemType>(json["item_type"].toInt());
+            item->id = state.id;
+            item->x = state.x;
+            item->y = state.y;
+            item->type = static_cast<ItemType>(state.type);
             items.append(item);
         }
         else if (type == "item_picked") {

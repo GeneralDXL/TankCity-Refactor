@@ -20,6 +20,8 @@ qt_add_executable(tankcity_client
     render/painter.h
     net/MessageFramer.cpp
     net/MessageFramer.h
+    net/MessageParser.cpp
+    net/MessageParser.h
     loadingwidget.cpp
     loadingwidget.h
 )
