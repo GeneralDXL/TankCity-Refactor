@@ -60,6 +60,10 @@ private:
     /// 卡住多久（帧）判定为需要重新寻路。来自 `ai.stuckThresholdTicks`（旧实现写死 15）。
     int stuckThresholdTicks = 15;
 
+    /// 最近一次 update() 收到的玩家位置。`canShoot()` 用它做视线判定，
+    /// 而 `Game` 每次都是先 update() 再问 canShoot()，所以它总是当帧的。
+    QPoint lastKnownPlayerPos;
+
     /// 距当前路径点"没有更近"的连续帧数（进度判据）
     int progressTimer = 0;
     /// 上次成功偏转的方向侧：+1 右、-1 左、0 未知/直行。用来保证滑动不来回翻转。

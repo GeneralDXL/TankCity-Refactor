@@ -94,22 +94,22 @@ QPoint PathFinder::snapToWalkable(const World &world, const QPoint &cell, int ma
     if (world.isCellWalkable(cell.x(), cell.y()))
         return cell;
 
-    QPoint result = cell;
+    // 由内向外逐圈扫，取**第一个**可通行格 —— 即切比雪夫距离最近的候选。
+    //
+    // 旧实现只 `break` 内层循环，于是每圈的候选会被后续候选覆盖，
+    // 最终返回的是"最后一个"而不是"最近的"。M3 步 4a 曾照搬它以保持行为不变；
+    // 4c 改掉，因为实测证明它会放大"无敌点"问题：玩家贴着墙站时其所在格不可通行，
+    // 终点被吸附到一个远处的格，敌人走到那儿就以为到了（详见 enemy.h 的说明）。
     for (int r = 1; r <= maxRadius; ++r) {
         for (int dx = -r; dx <= r; ++dx) {
             for (int dy = -r; dy <= r; ++dy) {
                 const QPoint candidate(cell.x() + dx, cell.y() + dy);
-                if (world.isCellWalkable(candidate.x(), candidate.y())) {
-                    result = candidate;
-                    // 这个 break 是旧实现的原样：它只跳出 dy 这一层，所以
-                    // 结果是「每个 dx 列的第一个可通行格」里最后被覆盖的那个，
-                    // 而不是真正的最近格。照搬以保持提取步骤行为不变。
-                    break;
-                }
+                if (world.isCellWalkable(candidate.x(), candidate.y()))
+                    return candidate;
             }
         }
     }
-    return result;
+    return cell;
 }
 
 QVector<QPoint> PathFinder::findPath(const World &world,

@@ -32,7 +32,17 @@ Enemy::Enemy(Map *gameMap, const QPoint &position, int difficulty,
 
 bool Enemy::canShoot() const
 {
-    return shootCooldown == 0 && shootTimer == 0;
+    if (shootCooldown != 0 || shootTimer != 0)
+        return false;
+
+    // 视线被墙挡住就不开火。否则敌人隔着墙照样射击，看起来就是"对着墙打"——
+    // 实测反馈里的现象之一。判据复用网格走线（一次 Bresenham），代价可忽略。
+    if (lastKnownPlayerPos.isNull())
+        return false;   // 还没 update() 过，不知道玩家在哪
+
+    return gameMap != nullptr
+           && gameMap->isLineWalkable(gameMap->worldToGrid(position),
+                                      gameMap->worldToGrid(lastKnownPlayerPos));
 }
 
 
@@ -81,10 +91,19 @@ void Enemy::update(const QPoint &playerPos, Map *map)
     }
 
     // ---- 沿路径推进 ----
-    // 目标点：路径上的当前格；路径为空时退回"直接朝玩家"（旧行为保留，但碰撞判定
-    // 改由 advanceTowards 统一处理）。
+    // 玩家位置存一份：canShoot() 用它做视线判定（Game 每帧先 update() 再问 canShoot()）
+    lastKnownPlayerPos = playerPos;
+
+    // 目标点：路径上的当前格；**最后一段直冲玩家本人**。
+    //
+    // 最后一段为什么不能用格心：路径的终点是"玩家所在格的中心"，而玩家常常贴着墙站，
+    // 那一格在网格里可能被判为不可通行（判据要求格内 40x40 全空，比连续空间的移动判定
+    // 保守），于是终点被吸附到别处。敌人走到那个吸附点后路径就走完了，它会以为已经到位 ——
+    // 表现为站在那儿对着墙打、或者干脆不动，直到玩家挪到空地上才恢复（实测反馈的"无敌点"）。
+    // 网格只负责把它带到附近，最后一两格用连续空间的移动判定（带贴墙滑动）去闭合。
     QPoint aimPos = playerPos;
-    if (currentPathIndex >= 0 && currentPathIndex < path.size()) {
+    const bool onLastLeg = currentPathIndex >= 0 && currentPathIndex + 1 >= path.size();
+    if (currentPathIndex >= 0 && currentPathIndex < path.size() && !onLastLeg) {
         aimPos = map->gridToWorld(path[currentPathIndex]);
 
         QPointF toTarget = QPointF(aimPos) - QPointF(position);
@@ -103,10 +122,12 @@ void Enemy::update(const QPoint &playerPos, Map *map)
     }
 
     advanceTowards(aimPos, map);
-    // 射击逻辑（保持原样）
-    if (QRandomGenerator::global()->bounded(100) < 40 && canShoot()) {
-        shoot();
-    }
+
+    // 这里原有一条 `if (rand < 40 && canShoot()) shoot();`，已删除：
+    //  - 返回值没人接管（`Enemy::shoot()` 返回 `new Bullet(...)`）→ 泄漏一颗子弹，
+    //    而且那颗子弹不会移动也不会被销毁；
+    //  - 它还会设上冷却，把 `Game::updateGame()` 里那一次**真正会广播**的射击挡掉。
+    // 射击统一由 Game 处理（只有它会把子弹登记进 bullets 并广播给客户端）。
 }
 
 void Enemy::resetWaypointProgress()

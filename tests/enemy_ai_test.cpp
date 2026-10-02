@@ -106,9 +106,9 @@ struct MazeFixture
 };
 
 /// 填充式而非返回式：`Map` 是 QObject，不可拷贝也不可移动。
-void setupMaze(MazeFixture &fixture)
+void setupMaze(MazeFixture &fixture, int levelIndex = 3)
 {
-    const LevelData level = ConfigLoader::loadLevelByIndex(kLevelsDir, 3, shipped());
+    const LevelData level = ConfigLoader::loadLevelByIndex(kLevelsDir, levelIndex, shipped());
     EXPECT_TRUE(fixture.map.loadLevel(level, shipped()));
 
     const World &world = fixture.map.world();
@@ -117,6 +117,46 @@ void setupMaze(MazeFixture &fixture)
 
     fixture.enemyStart = world.gridToWorld(startCell);
     fixture.playerPos = world.gridToWorld(targetCell);
+}
+
+/**
+ * 找一个"坦克站得住、但**它所在的格**被判为不可通行"的位置 —— 实测反馈里的"无敌点"。
+ *
+ * 为什么必须按**位置**扫而不是按格心扫：`isCellWalkable` 用的探针正是"格心处 40x40"
+ * （D1 就是这么定义的），所以两者的结论在**格心**必然一致 —— 按格心搜会一个都搜不到。
+ * 病灶在偏离格心的位置：坦克站在离墙 20px 处站得住，可它的格心却可能落在墙的探测范围里，
+ * 于是"玩家所在格"不可通行，路径终点被吸附到别处。
+ *
+ * 判据两侧刻意用不同口径：连续侧用 `Map::checkTankCollision`（移动真正用的判定），
+ * 网格侧用 `isCellWalkable`。二者不一致的地方，正是敌人找不着玩家的地方。
+ */
+bool findInvincibilitySpot(Map &map, const QPoint &farFrom, QPoint &out)
+{
+    const World &world = map.world();
+    bool found = false;
+    double best = -1.0;
+
+    for (int py = 30; py < Map::MAP_HEIGHT - 30; py += 5) {
+        for (int px = 30; px < Map::MAP_WIDTH - 30; px += 5) {
+            const QRect probe(px - 20, py - 20, 40, 40);
+            if (map.checkTankCollision(probe, nullptr) != -1)
+                continue;   // 连续空间站不住，跳过
+
+            const QPoint cell = world.worldToGrid(QPoint(px, py));
+            if (world.isCellWalkable(cell.x(), cell.y()))
+                continue;   // 网格也说能站，那就不是我们要找的地方
+
+            // 取离敌人最远的那个：位置太近就测不出"走不到"这件事
+            const double d = std::hypot(static_cast<double>(px - farFrom.x()),
+                                        static_cast<double>(py - farFrom.y()));
+            if (d > best) {
+                best = d;
+                out = QPoint(px, py);
+                found = true;
+            }
+        }
+    }
+    return found;
 }
 
 } // namespace
@@ -146,6 +186,41 @@ TEST(EnemyAi, ReachesThePlayerAcrossTheMaze) {
     EXPECT_LT(finalDistance, 60.0)
         << "敌人在迷宫里没能接近玩家（初始 " << initialDistance
         << "，最终 " << finalDistance << "）—— 疑似卡在墙上反复挪动";
+}
+
+/**
+ * 玩家贴在墙边（所在格被网格判为不可通行）时，敌人也**必须能贴近**。
+ *
+ * 这是实测反馈的"无敌点"：路径终点是玩家所在格的中心，那一格不可通行时会被吸附到
+ * 别处，敌人走到吸附点就以为到位了 —— 站在那儿打墙或不动，直到玩家挪到空地。
+ * 修法是「最后一段直冲玩家本人」，用连续空间的判定闭合最后一两格。
+ *
+ * 用第 1 关（开阔）当夹具：那里空地连通，位置选取不会掺进"死区"这个独立问题。
+ */
+TEST(EnemyAi, ReachesAPlayerHuggingAWall) {
+    MazeFixture fixture;
+    setupMaze(fixture, 0);
+
+    const World &world = fixture.map.world();
+    const QPoint enemyStart = world.gridToWorld(firstWalkable(world));
+
+    QPoint spot;
+    ASSERT_TRUE(findInvincibilitySpot(fixture.map, enemyStart, spot))
+        << "这张关卡里没找到\"坦克站得住但网格说不可通行\"的位置";
+    ASSERT_GT(distance(enemyStart, spot), 300.0) << "找不出够远的无敌点，测不出问题";
+
+    tankcity::config::TankStats stats =
+        tankcity::config::resolveEnemyStats(shipped(), shipped().difficulties.at(0));
+    const tankcity::config::AiDef ai;
+    Enemy enemy(&fixture.map, enemyStart, 0, stats, ai);
+
+    for (int frame = 0; frame < 1800; ++frame)
+        enemy.update(spot, &fixture.map);
+
+    const double finalDistance = distance(enemy.getPosition(), spot);
+    EXPECT_LT(finalDistance, 60.0)
+        << "敌人没能贴近贴墙站的玩家（最终距离 " << finalDistance
+        << "）—— 疑似走到吸附点就以为到位了";
 }
 
 /**
