@@ -23,6 +23,7 @@
 #include "config/TankStats.h"
 #include "enemy.h"
 #include "map.h"
+#include "player.h"
 
 namespace {
 
@@ -232,6 +233,35 @@ TEST(EnemyAi, ReachesAPlayerHuggingAWall) {
  *
  * 前 10 帧不算：开局那一次"转向对准目标"本来就该是一个大跳变。
  */
+/**
+ * 全速撞薄墙不得穿过去 —— M3 DoD 第 3 条「不穿模」的直接用例。
+ *
+ * 用试验场图的**边界**当薄墙：厚度 2px（`boundary.thickness`），比一帧位移（玩家 5px/帧）还窄。
+ * 断言坦克始终留在墙内侧（探测盒 40 高 → 中心最低 22，取 20 留 2px 余量）。
+ *
+ * ⚠️ 说清它的分量：**在当前配置下，本用例拦不住"没写扫掠"的实现** —— 探测盒有 40px 宽，
+ * 即便只判终点，2px 的墙也必然与终点探针重叠（能被跳过的墙得厚过盒宽）。扫掠真正防的是
+ * 「小盒 / 高速度」这类将来才可能配出来的组合（见 tank.cpp 里 kMaxSubSteps 的说明）。
+ * 所以这是一条**性质守卫**（把"过不去"钉住），不是扫掠的区分性用例 —— 别误以为它证明了扫掠有效。
+ */
+TEST(EnemyAi, CannotTunnelThroughATwoPixelBoundary) {
+    MazeFixture fixture;
+    setupMaze(fixture, 10);   // level_11：boundary thickness = 2
+
+    const tankcity::config::TankStats stats =
+        tankcity::config::resolveTankStats(shipped(), QStringLiteral("player"));
+    Player player(&fixture.map, stats);
+    player.init(600, 450);    // 世界中央，向上直冲边界
+
+    for (int frame = 0; frame < 120; ++frame) {
+        player.setMoveVector(QPointF(0, -1));
+        player.update();
+    }
+
+    EXPECT_GE(player.getPosition().y(), 20)
+        << "坦克穿过了 2px 的边界（全速撞薄墙穿模）";
+}
+
 TEST(EnemyAi, HullAngleDoesNotAlternateWhileCrossingOpenGround) {
     MazeFixture fixture;
     setupMaze(fixture, 0);   // 开阔关
