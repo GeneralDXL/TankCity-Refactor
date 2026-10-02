@@ -29,6 +29,7 @@ WallState parseWall(const QJsonObject &object)
     const QPoint position = parsePoint(object["position"].toObject());
     const QJsonObject size = object["size"].toObject();
     state.rect = QRect(position.x(), position.y(), size["width"].toInt(), size["height"].toInt());
+    state.block = object["block"].toString();   // M3 步 5：物块 id（过渡期与 type 并存）
     state.type = object["type"].toInt();
     state.id = object["id"].toInt();
     return state;

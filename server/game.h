@@ -97,7 +97,16 @@ private:
      * 调用方应当放弃创建实体而不是用 0 值凑合。
      */
     bool resolvePlayerStats(tankcity::config::TankStats &stats);
-    bool resolveCurrentEnemyStats(tankcity::config::TankStats &stats);
+
+    /**
+     * 解析当前难度的敌人数值**与 AI 参数**。
+     *
+     * AI 参数（重寻路间隔 / 卡住阈值）此前在 `Enemy` 里写死，配置 `difficulty.json`
+     * 的 `ai` 段虽然被加载器解析了却从未被读过（M3 步 4 接线）。与数值一起解析，
+     * 可以让"难度越界"只判一次。
+     */
+    bool resolveCurrentEnemyStats(tankcity::config::TankStats &stats,
+                                  tankcity::config::AiDef &ai);
 
     void updateGame();
     void checkCollisions();

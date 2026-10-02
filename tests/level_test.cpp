@@ -104,30 +104,14 @@ QString rectText(const QRect &r)
     return QStringLiteral("[%1, %2, %3, %4]").arg(r.x()).arg(r.y()).arg(r.width()).arg(r.height());
 }
 
-/**
- * 物块 id -> wall.h 的 int type。
- *
- * 这层对应关系原本由一次性导出工具的 `blockIdOf()` 建立（BRICK -> "brick" ...）。
- * 这里独立重写一遍，而不是去调 `map.cpp` 里的桥接表 —— 两边若有一处写错，测试会当场发现。
- */
-int legacyTypeOfBlock(const QString &id)
+/// 比对用的键：物块 id + 矩形。
+///
+/// M3 步 5 之前这里是 `%1@%2` 配一张 id -> int 的映射表（`legacyTypeOfBlock`）——
+/// 那时 Wall 用类型号表达身份，映射表本身也成了必须与别处对齐的重复信息。
+/// 现在快照与关卡文件里用的都是物块 id，那层映射连同它的重复风险一起消失了。
+QString wallKey(const QString &block, const QRect &r)
 {
-    if (id == QLatin1String("brick"))
-        return BRICK;
-    if (id == QLatin1String("steel"))
-        return STEEL;
-    if (id == QLatin1String("forest"))
-        return FOREST;
-    if (id == QLatin1String("sea"))
-        return SEA;
-    if (id == QLatin1String("ice"))
-        return ICE;
-    return -1;  // 旧关卡里只会出现上述五种
-}
-
-QString wallKey(int type, const QRect &r)
-{
-    return QStringLiteral("%1@%2").arg(type).arg(rectText(r));
+    return QStringLiteral("%1@%2").arg(block).arg(rectText(r));
 }
 
 /**
@@ -549,11 +533,11 @@ TEST(MapLoad, JsonDrivenMapReproducesLegacyWallSet)
         int boundaryCount = 0;
         QVector<QString> actualBlocks;
         for (const Wall &w : map.getWalls()) {
-            if (w.getType() == BOUNDARY) {
+            if (w.getBlockId() == QLatin1String("boundary")) {
                 ++boundaryCount;
                 continue;
             }
-            actualBlocks.append(wallKey(w.getType(), w.getRect()));
+            actualBlocks.append(wallKey(w.getBlockId(), w.getRect()));
         }
         actualBlocks.sort();
 
@@ -561,7 +545,7 @@ TEST(MapLoad, JsonDrivenMapReproducesLegacyWallSet)
         // 两者的分组方式不同（这一点由 LevelLoad 用例证明几何与类型完全一致）。
         QVector<QString> expectedBlocks;
         for (const auto &b : legacyBlocks(legacy.at(index)))
-            expectedBlocks.append(wallKey(legacyTypeOfBlock(b.first), b.second));
+            expectedBlocks.append(wallKey(b.first, b.second));
         expectedBlocks.sort();
 
         EXPECT_EQ(actualBlocks, expectedBlocks);
@@ -576,34 +560,37 @@ TEST(MapLoad, JsonDrivenMapReproducesLegacyWallSet)
 
 namespace {
 
-/// `Map::checkTankCollision` 会跳过的地形（坦克能穿过）。
-bool tankSees(int type)
+/// 坦克能穿过的物块：`blocksTank=false` 的不进碰撞世界，所以拦住坦克的查询
+/// 永远看不到它们（见 World::rebuildCollisionWorld）。
+bool tankSees(const QString &block)
 {
-    return type != FOREST && type != ICE;
+    return block != QLatin1String("forest") && block != QLatin1String("ice");
 }
 
-/// `Map::checkBulletCollision` 会跳过的地形（子弹能穿过）。
-bool bulletSees(int type)
+/// 子弹能穿过的物块（`Map::checkBulletCollision` 会跳过它们）。
+bool bulletSees(const QString &block)
 {
-    return type != FOREST && type != SEA && type != ICE;
+    return !(block == QLatin1String("forest") || block == QLatin1String("sea")
+             || block == QLatin1String("ice"));
 }
 
-struct TypedRect
+/// 物块 id + 矩形。边界用固定 id "boundary"。
+struct BlockRect
 {
-    int type;
+    QString block;
     QRect rect;
 };
 
 /// 旧快照的墙体，**保留数组顺序**——它就是旧 `Map::loadMap()` 的 append 顺序。
-QVector<TypedRect> legacyWallsOf(const QJsonObject &level)
+/// 快照里的 `type` 字段本来就是物块 id 字符串（M2 导出时写入的），直接取用即可。
+QVector<BlockRect> legacyWallsOf(const QJsonObject &level)
 {
-    QVector<TypedRect> result;
+    QVector<BlockRect> result;
     for (const QJsonValue &v : level.value(QStringLiteral("walls")).toArray()) {
         const QJsonObject w = v.toObject();
-        const QString type = w.value(QStringLiteral("type")).toString();
         const QJsonArray r = w.value(QStringLiteral("rect")).toArray();
-        result.append(TypedRect{
-            type == QLatin1String("boundary") ? BOUNDARY : legacyTypeOfBlock(type),
+        result.append(BlockRect{
+            w.value(QStringLiteral("type")).toString(),
             QRect(r.at(0).toInt(), r.at(1).toInt(), r.at(2).toInt(), r.at(3).toInt())});
     }
     return result;
@@ -614,7 +601,7 @@ QVector<TypedRect> legacyWallsOf(const QJsonObject &level)
 /**
  * 旧代码按 case 内 append 的顺序、新代码按图层分组，两者的 walls 顺序不同。
  *
- * `checkBulletCollision` / `checkTankCollision` 都是「首个命中即返回」，顺序一变就可能
+ * `checkBulletCollision` / `blocksTankAt` 都是「首个命中即返回」，顺序一变就可能
  * 改变行为（打中哪块砖、踩在哪层地形上）。本用例不去复刻这两个函数，而是直接守住使它们
  * 无法观察差异的结构性前提：
  *
@@ -637,27 +624,27 @@ TEST(MapOrder, ReorderingIsInvisibleToFirstHitLogic)
 
         const LevelData level = ConfigLoader::loadLevelByIndex(kLevelsDir, index, shipped());
 
-        const QVector<TypedRect> oldWalls = legacyWallsOf(legacy.at(index));
-        QVector<TypedRect> newWalls;
+        const QVector<BlockRect> oldWalls = legacyWallsOf(legacy.at(index));
+        QVector<BlockRect> newWalls;
         for (const QRect &r : level.boundaryRects())
-            newWalls.append(TypedRect{BOUNDARY, r});
+            newWalls.append(BlockRect{QLatin1String("boundary"), r});
         for (const LevelRect &lr : level.allRects())
-            newWalls.append(TypedRect{legacyTypeOfBlock(lr.block), lr.rect});
+            newWalls.append(BlockRect{lr.block, lr.rect});
 
         ASSERT_EQ(oldWalls.size(), newWalls.size());
 
         // 1) 边界在两种顺序里都排在所有物块之前（旧代码先 append 四条边界，新代码同理）。
         //    边界的矩形拆分方式变了（像素相同），所以只比"位置",不比矩形。
-        const auto firstBlockIndex = [](const QVector<TypedRect> &v) {
+        const auto firstBlockIndex = [](const QVector<BlockRect> &v) {
             for (int i = 0; i < v.size(); ++i)
-                if (v.at(i).type != BOUNDARY)
+                if (v.at(i).block != QLatin1String("boundary"))
                     return i;
             return static_cast<int>(v.size());
         };
-        const auto lastBoundaryIndex = [](const QVector<TypedRect> &v) {
+        const auto lastBoundaryIndex = [](const QVector<BlockRect> &v) {
             int last = -1;
             for (int i = 0; i < v.size(); ++i)
-                if (v.at(i).type == BOUNDARY)
+                if (v.at(i).block == QLatin1String("boundary"))
                     last = i;
             return last;
         };
@@ -668,12 +655,12 @@ TEST(MapOrder, ReorderingIsInvisibleToFirstHitLogic)
         QVector<int> newIndexOf(oldWalls.size(), -1);
         QVector<bool> matched(newWalls.size(), false);
         for (int i = 0; i < oldWalls.size(); ++i) {
-            if (oldWalls.at(i).type == BOUNDARY)
+            if (oldWalls.at(i).block == QLatin1String("boundary"))
                 continue;
             for (int j = 0; j < newWalls.size(); ++j) {
-                if (matched.at(j) || newWalls.at(j).type == BOUNDARY)
+                if (matched.at(j) || newWalls.at(j).block == QLatin1String("boundary"))
                     continue;
-                if (newWalls.at(j).type == oldWalls.at(i).type
+                if (newWalls.at(j).block == oldWalls.at(i).block
                     && newWalls.at(j).rect == oldWalls.at(i).rect) {
                     matched[j] = true;
                     newIndexOf[i] = j;
@@ -687,17 +674,17 @@ TEST(MapOrder, ReorderingIsInvisibleToFirstHitLogic)
         for (int pass = 0; pass < 2; ++pass) {
             const bool forBullet = (pass == 1);
             for (int i = 0; i < oldWalls.size(); ++i) {
-                const TypedRect &a = oldWalls.at(i);
+                const BlockRect &a = oldWalls.at(i);
                 if (newIndexOf.at(i) < 0)  // 边界：拆分方式不同，不参与配对
                     continue;
-                if (!(forBullet ? bulletSees(a.type) : tankSees(a.type)))
+                if (!(forBullet ? bulletSees(a.block) : tankSees(a.block)))
                     continue;
 
                 for (int j = i + 1; j < oldWalls.size(); ++j) {
-                    const TypedRect &b = oldWalls.at(j);
+                    const BlockRect &b = oldWalls.at(j);
                     if (newIndexOf.at(j) < 0)
                         continue;
-                    if (!(forBullet ? bulletSees(b.type) : tankSees(b.type)))
+                    if (!(forBullet ? bulletSees(b.block) : tankSees(b.block)))
                         continue;
                     if (!a.rect.intersects(b.rect))
                         continue;
@@ -795,11 +782,19 @@ QByteArray minimalLevel(const QString &id, const QString &name = QString())
 
 } // namespace
 
+/// 仓库里现有多少张关卡。列表用例一律以它为基数 —— 这样**以后加图不必改测试**，
+/// 这正是 M3 DoD 第 6 条（新图靠 JSON 即可玩）的要求：加一张图只该动数据。
+int shippedLevelCount()
+{
+    return ConfigLoader::listLevels(kLevelsDir).size();
+}
+
 TEST(LevelList, ShippedLevelsAreListedInOrder)
 {
     const QVector<LevelEntry> levels = ConfigLoader::listLevels(kLevelsDir);
 
-    ASSERT_EQ(levels.size(), 10) << "assets/levels 下应有 10 张关卡（index.json 不算关卡）";
+    // 只要求"不低于最初的 10 张"：张数会随试玩图与正式关卡增加，写死等于每加一张就改测试
+    ASSERT_GE(levels.size(), 10) << "assets/levels 下至少应有 10 张关卡（index.json 不算关卡）";
     for (int i = 0; i < levels.size(); ++i) {
         EXPECT_EQ(levels.at(i).index, i) << "第 " << i << " 项的序号必须与其位置一致";
         EXPECT_EQ(levels.at(i).id, QStringLiteral("level_%1").arg(i + 1, 2, 10, QLatin1Char('0')));
@@ -811,39 +806,46 @@ TEST(LevelList, ShippedLevelsAreListedInOrder)
 TEST(LevelList, NewLevelFileAppearsWithoutCppChange)
 {
     TempLevelsDir tmp;
-    tmp.writeFile(QStringLiteral("level_11.json"),
-                  minimalLevel(QStringLiteral("level_11"), QStringLiteral("新增测试关")));
+    // 编号必须**紧接在现有之后**：序号就是文件名里的数字减一（服务端按「序号+1」拼
+    // level_NN.json），所以不能跳号 —— 用 level_99 的话它的 index 会是 98，
+    // 而 loadLevelByIndex(14) 依旧去找 level_15.json。也不能复用 level_11：
+    // 那会覆盖复制过来的真文件，测不出「多了一项」。
+    const int base = shippedLevelCount();
+    const QString newId = QStringLiteral("level_%1").arg(base + 1, 2, 10, QLatin1Char('0'));
+    tmp.writeFile(newId + QStringLiteral(".json"),
+                  minimalLevel(newId, QStringLiteral("新增测试关")));
 
     const QVector<LevelEntry> levels = ConfigLoader::listLevels(tmp.dir());
 
-    ASSERT_EQ(levels.size(), 11) << "多放一个 level_11.json，列表就该多一项";
-    EXPECT_EQ(levels.last().index, 10) << "序号 10 对应 level_11.json";
-    EXPECT_EQ(levels.last().id, QStringLiteral("level_11"));
+    ASSERT_EQ(levels.size(), base + 1) << "多放一个关卡文件，列表就该多一项";
+    EXPECT_EQ(levels.last().index, base) << "序号排在现有全部之后";
+    EXPECT_EQ(levels.last().id, newId);
     EXPECT_EQ(levels.last().name, QStringLiteral("新增测试关"));
 
-    // 序号是 UI ↔ 服务端的契约：服务端拿 10 去拼 level_11.json 必须拼得到。
-    const LevelData loaded = ConfigLoader::loadLevelByIndex(tmp.dir(), 10, shipped());
-    EXPECT_EQ(loaded.id, QStringLiteral("level_11"));
+    // 序号是 UI ↔ 服务端的契约：服务端拿这个序号去拼文件名必须拼得到。
+    const LevelData loaded = ConfigLoader::loadLevelByIndex(tmp.dir(), base, shipped());
+    EXPECT_EQ(loaded.id, newId);
 }
 
 TEST(LevelList, NameFallsBackToIdWhenMissing)
 {
     TempLevelsDir tmp;
-    tmp.writeFile(QStringLiteral("level_11.json"), minimalLevel(QStringLiteral("level_11")));
+    tmp.writeFile(QStringLiteral("level_99.json"), minimalLevel(QStringLiteral("level_99")));
 
     const QVector<LevelEntry> levels = ConfigLoader::listLevels(tmp.dir());
 
-    ASSERT_EQ(levels.size(), 11);
-    EXPECT_EQ(levels.last().name, QStringLiteral("level_11")) << "没写 name 时退回 id";
+    ASSERT_EQ(levels.size(), shippedLevelCount() + 1);
+    EXPECT_EQ(levels.last().name, QStringLiteral("level_99")) << "没写 name 时退回 id";
 }
 
 TEST(LevelList, BrokenFileIsSkippedInsteadOfFailing)
 {
     TempLevelsDir tmp;
-    tmp.writeFile(QStringLiteral("level_11.json"), QByteArray("{ 这不是 JSON"));
+    // 同样避开仓库里已有的名字，否则会把复制过来的好文件也写坏
+    tmp.writeFile(QStringLiteral("level_99.json"), QByteArray("{ 这不是 JSON"));
 
     // 列表是菜单的入口：一张关卡写坏不该把整个菜单拖死（可玩性由开局时的加载兜底）。
-    EXPECT_EQ(ConfigLoader::listLevels(tmp.dir()).size(), 10);
+    EXPECT_EQ(ConfigLoader::listLevels(tmp.dir()).size(), shippedLevelCount());
 }
 
 TEST(LevelList, OnlyLevelFilesAreListed)
@@ -852,7 +854,7 @@ TEST(LevelList, OnlyLevelFilesAreListed)
     tmp.writeFile(QStringLiteral("level_10_backup.json"), QByteArray("{}"));
     tmp.writeFile(QStringLiteral("readme.txt"), QByteArray("hi"));
 
-    EXPECT_EQ(ConfigLoader::listLevels(tmp.dir()).size(), 10)
+    EXPECT_EQ(ConfigLoader::listLevels(tmp.dir()).size(), shippedLevelCount())
         << "只认 level_NN.json：备份与说明文件不该出现在菜单里";
     EXPECT_TRUE(ConfigLoader::listLevels(QStringLiteral("no/such/levels/dir")).isEmpty())
         << "目录不存在时返回空列表，不抛异常";

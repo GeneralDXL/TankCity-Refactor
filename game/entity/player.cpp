@@ -67,97 +67,49 @@ void Player::updateCooldown()
     }
 }
 
-QRect Player::getRect() const
-{
-    // 调整碰撞框大小以匹配新尺寸
-    return QRect(position.x() - 15, position.y() - 15, 30, 30);
-}
-
-void Player::setMoveForward(bool forward)
-{
-    if (forward) {
-        pressedKeys.insert(Qt::Key_W);
-    } else {
-        pressedKeys.remove(Qt::Key_W);
-    }
-}
-
-void Player::setMoveBackward(bool backward)
-{
-    if (backward) {
-        pressedKeys.insert(Qt::Key_S);
-    } else {
-        pressedKeys.remove(Qt::Key_S);
-    }
-}
-
-void Player::setTurnLeft(bool left)
-{
-    if (left) {
-        pressedKeys.insert(Qt::Key_A);
-    } else {
-        pressedKeys.remove(Qt::Key_A);
-    }
-}
-
-void Player::setTurnRight(bool right)
-{
-    if (right) {
-        pressedKeys.insert(Qt::Key_D);
-    } else {
-        pressedKeys.remove(Qt::Key_D);
-    }
-}
-
-bool Player::isMoveForward() const
-{
-    return pressedKeys.contains(Qt::Key_W);
-}
-
-bool Player::isMoveBackward() const
-{
-    return pressedKeys.contains(Qt::Key_S);
-}
-
-bool Player::isTurnLeft() const
-{
-    return pressedKeys.contains(Qt::Key_A);
-}
-
-bool Player::isTurnRight() const
-{
-    return pressedKeys.contains(Qt::Key_D);
-}
-
 void Player::update()
 {
-    // 更新炮塔角度（始终指向鼠标位置）
-    if (!mousePos.isNull()) {
-        float dx = mousePos.x() - position.x();
-        float dy = mousePos.y() - position.y();
-        float angle = qRadiansToDegrees(atan2(dy, dx));
-        setTurretAngle(angle);
+    updateTurretAim();
+    updateMovement();
+}
+
+void Player::updateTurretAim()
+{
+    // 炮塔始终指向瞄准点。与旧实现逐字对应 —— 包括 `!isNull()` 这道门槛：
+    // 瞄准点为 (0,0) 时不改角度。本步不顺手改这个口径（世界左上角恰好是 (0,0)，
+    // 要改成"是否有过瞄准点"得另开一个标记，属另一件事）。
+    if (!aimPoint.isNull()) {
+        const float dx = static_cast<float>(aimPoint.x() - position.x());
+        const float dy = static_cast<float>(aimPoint.y() - position.y());
+        setTurretAngle(qRadiansToDegrees(atan2(dy, dx)));
+    }
+}
+
+void Player::updateMovement()
+{
+    // 冷却每帧走一格。这一步原来藏在 `Tank::move()` 里（移动时推进、静止时由这里补），
+    // M3 步 4b 把它从 move() 移出来改成无条件推进 —— 每帧仍恰好减一次。
+    updateCooldown();
+
+    if (moveVector.isNull())
+        return;
+
+    // 八向归一化：数字键的斜向送来 (±1, ±1)，模长 √2 —— 不归一化的话斜着走会快 41%。
+    // 归一化放在**服务端**（权威端）而不是客户端：「走多快」是规则，不是输入；
+    // 而且摇杆将来送来的是模长 ≤1 的连续值，这里只削峰、不放大，一并兼容。
+    QPointF v = moveVector;
+    double length = std::hypot(v.x(), v.y());
+    if (length > 1.0) {
+        v /= length;
+        length = 1.0;
     }
 
-    // 处理车身旋转
-    if (isTurnLeft() && !isTurnRight()) {
-        bodyAngle -= 5.0f;  // 逆时针旋转
-    } else if (isTurnRight() && !isTurnLeft()) {
-        bodyAngle += 5.0f;  // 顺时针旋转
-    }
-
-    // 规范化角度到0-360范围
+    // 车体朝向 = 移动方向。这是相对旧「坦克式」的**手感变化**，也是本里程碑的核心：
+    //   - A/D 不再单独转身 —— 车身随移动方向立刻指向该方向；
+    //   - S 不再是半速倒车 —— 八向下「往后走」就是车头转向后、正常速度走。
+    // 依据 M3 决议：双摇杆下车体唯一的职责就是表达"往哪走"，转向不再是独立自由度。
+    bodyAngle = static_cast<float>(qRadiansToDegrees(atan2(v.y(), v.x())));
     bodyAngle = fmod(bodyAngle + 360.0f, 360.0f);
 
-    // 处理移动
-    if (isMoveForward() && !isMoveBackward()) {
-        // 向前移动
-        move(bodyAngle, speed, gameMap);
-    } else if (isMoveBackward() && !isMoveForward()) {
-        // 向后移动（速度减半）
-        move(bodyAngle + 180.0, speed * 0.5f, gameMap);
-    } else {
-        // 没有移动时更新冷却
-        updateCooldown();
-    }
+    move(bodyAngle, static_cast<float>(speed * length), gameMap);
 }

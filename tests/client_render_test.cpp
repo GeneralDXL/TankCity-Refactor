@@ -75,7 +75,7 @@ TEST(ClientMapDraw, BoundaryBlockIsFilledGreyWithBlackBorder)
     engine::render::TextureCache textures(QStringLiteral("."));   // 纯色分支不会真的取贴图
     MapPainter map;
 
-    map.addWall(WallPainter(10, 20, 30, 40, 0, 7));   // type 0 = 边界
+    map.addWall(WallPainter(10, 20, 30, 40, QStringLiteral("boundary"), 7));   // 边界走纯色分支
     map.draw(renderer, textures);
 
     ASSERT_EQ(renderer.calls.size(), 1);
@@ -93,9 +93,9 @@ TEST(ClientMapDraw, DrawsInWallInsertionOrderAtEachWallRect)
     MapPainter map;
 
     // 三面边界，矩形各不相同：绘制顺序必须与加入顺序一致（后画的盖住先画的）。
-    map.addWall(WallPainter(0, 0, 10, 10, 0, 1));
-    map.addWall(WallPainter(10, 0, 10, 10, 0, 2));
-    map.addWall(WallPainter(20, 0, 10, 10, 0, 3));
+    map.addWall(WallPainter(0, 0, 10, 10, QStringLiteral("boundary"), 1));
+    map.addWall(WallPainter(10, 0, 10, 10, QStringLiteral("boundary"), 2));
+    map.addWall(WallPainter(20, 0, 10, 10, QStringLiteral("boundary"), 3));
     map.draw(renderer, textures);
 
     ASSERT_EQ(renderer.calls.size(), 3);
@@ -110,8 +110,8 @@ TEST(ClientMapDraw, RemovingAWallDropsItsDrawCall)
     engine::render::TextureCache textures(QStringLiteral("."));
     MapPainter map;
 
-    map.addWall(WallPainter(0, 0, 10, 10, 0, 1));
-    map.addWall(WallPainter(50, 0, 10, 10, 0, 2));
+    map.addWall(WallPainter(0, 0, 10, 10, QStringLiteral("boundary"), 1));
+    map.addWall(WallPainter(50, 0, 10, 10, QStringLiteral("boundary"), 2));
 
     map.removeWall(1);   // 模拟服务端下发 delete_wall
     map.draw(renderer, textures);

@@ -4,6 +4,7 @@
 #include <QJsonObject>
 #include <QPoint>
 #include <QRect>
+#include <QString>
 
 namespace client::net {
 
@@ -35,6 +36,16 @@ struct TankState
 struct WallState
 {
     QRect rect;
+    /**
+     * 物块 id（`blocks.json` 的键；边界墙是 `"boundary"`）。
+     *
+     * M3 步 5 起服务端会发它，客户端随后改按它查贴图表（见 painter.cpp 的
+     * kBlockTextures）—— 这样"哪种物块用哪张贴图"就不再依赖一个跨进程的约定数字。
+     * 目前只是收下，绘制仍走下面的 `type`，所以本步零行为变化。
+     */
+    QString block;
+    /// 旧字段：服务端协议里的墙类型号（边界 0 / 砖 1 / 钢 2 / 森林 3 / 海 4 / 冰 5）。
+    /// 过渡期保留，客户端切到 `block` 之后它与服务端的发送一并删除。
     int type = 0;
     int id = 0;
 };

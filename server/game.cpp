@@ -60,7 +60,8 @@ bool Game::resolvePlayerStats(tankcity::config::TankStats &stats)
     }
 }
 
-bool Game::resolveCurrentEnemyStats(tankcity::config::TankStats &stats)
+bool Game::resolveCurrentEnemyStats(tankcity::config::TankStats &stats,
+                                    tankcity::config::AiDef &ai)
 {
     if (!ensureConfig()) return false;
 
@@ -74,8 +75,10 @@ bool Game::resolveCurrentEnemyStats(tankcity::config::TankStats &stats)
     }
 
     try {
-        stats = tankcity::config::resolveEnemyStats(m_config,
-                                                   m_config.difficulties.at(currentDifficulty));
+        const tankcity::config::DifficultyDef &difficulty =
+            m_config.difficulties.at(currentDifficulty);
+        stats = tankcity::config::resolveEnemyStats(m_config, difficulty);
+        ai = difficulty.ai;
         return true;
     } catch (const tankcity::config::ConfigError &e) {
         qCritical() << "敌人数值解析失败：" << e.what();
@@ -244,7 +247,11 @@ void Game::addPlayer(int clientId)
 {
     if (players.contains(clientId)) return;
     
-    int playerX=80, playerY=400;
+    // 出生点：从固定的"期望位置"出发，由引擎挪到最近一个**放得下整辆车**的格子中心。
+    // 以前这里是写死的 80,400，与关卡内容毫无关系 —— level_13 的海正好压着这一格
+    // （x=80 → 第 1 列，y=400 → 第 8 行，而海整行都在那里），玩家一开局就卡在海里。
+    // 判据与"这一格能不能走"完全一致，见 World::nearestWalkableCenter。
+    const QPoint spawn = gameMap->nearestWalkableCenter(QPoint(80, 400));
 
     tankcity::config::TankStats stats;
     if (!resolvePlayerStats(stats)) {
@@ -254,7 +261,7 @@ void Game::addPlayer(int clientId)
 
     // 创建玩家坦克
     auto player = std::make_shared<Player>(gameMap, stats);
-    player->init(playerX, playerY);
+    player->init(spawn.x(), spawn.y());
     players.insert(clientId, player);
     oneOfId = clientId;
     
@@ -264,11 +271,14 @@ void Game::addPlayer(int clientId)
     }
     
     // 通知所有玩家有新玩家加入
-    qDebug() << "new new new " << playerX << ' ' << playerY << '\n';
+    // 用**实际**位置上报：出生点可能被引擎挪到别的格子，报文必须跟着走 ——
+    // 原先这里发的是那两个写死的局部变量，出生点一旦调整客户端就会被告知错误坐标。
+    const QPoint actual = player->getPosition();
+    qDebug() << "new new new " << actual.x() << ' ' << actual.y() << '\n';
     QJsonObject json;
     json["type"] = "player_init";
     json["id"] = clientId;
-    json["position"] = QJsonObject{{"x", playerX}, {"y", playerY}};
+    json["position"] = QJsonObject{{"x", actual.x()}, {"y", actual.y()}};
     json["bodyAngle"] = player->getBodyAngle();
     json["turretAngle"] = player->getTurretAngle();
     json["health"] = player->getHealth();
@@ -296,17 +306,14 @@ void Game::handlePlayerInput(int clientId, const QJsonObject &input)
     
     auto player = players[clientId];
     
-    // 处理按键输入
-    QJsonObject keys = input["keys"].toObject();
-    player->setMoveForward(keys["w"].toBool());
-    player->setMoveBackward(keys["s"].toBool());
-    player->setTurnLeft(keys["a"].toBool());
-    player->setTurnRight(keys["d"].toBool());
+    // 双摇杆（M3）：上行只送两个向量 —— 往哪走、瞄哪。这里不判断「哪个键是前进」，
+    // 玩法解释全在 Player 里（协议见 docs/plans/M3-世界与玩法重构草案.md 决议 D2）。
+    const QJsonObject moveObj = input["move"].toObject();
+    player->setMoveVector(QPointF(moveObj["x"].toDouble(), moveObj["y"].toDouble()));
     
     // 处理鼠标位置
-    QJsonObject mouse = input["mousePos"].toObject();
-    QPoint mousePos(mouse["x"].toInt(), mouse["y"].toInt());
-    player->setTurretTarget(mousePos);
+    const QJsonObject aimObj = input["aim"].toObject();
+    player->setAimPoint(QPoint(aimObj["x"].toInt(), aimObj["y"].toInt()));
     
     // 处理射击
     if (input["shoot"].toBool() && player->canShoot()) {
@@ -729,12 +736,13 @@ void Game::spawnEnemy()
     }
     
     tankcity::config::TankStats stats;
-    if (!resolveCurrentEnemyStats(stats)) {
+    tankcity::config::AiDef ai;
+    if (!resolveCurrentEnemyStats(stats, ai)) {
         qCritical() << "敌人数值不可用，放弃生成敌人";
         return;
     }
 
-    auto enemy = std::make_shared<Enemy>(gameMap, QPoint(x, y), currentDifficulty, stats);
+    auto enemy = std::make_shared<Enemy>(gameMap, QPoint(x, y), currentDifficulty, stats, ai);
     enemies.append(enemy);
     
     // 广播新敌人
@@ -835,7 +843,7 @@ void Game::sendInitialState(int clientId)
         wallObj["position"] = QJsonObject{{"x", w.x()}, {"y", w.y()}};
         wallObj["size"] = QJsonObject{{"width", w.width()}, {"height", w.height()}};
         wallObj["id"] = wall.getId();
-        wallObj["type"] = wall.getType();
+        wallObj["block"] = wall.getBlockId();   // 物块 id：客户端按它查贴图表
         wallArray.append(wallObj);
     }
     mapJson["walls"] = wallArray;

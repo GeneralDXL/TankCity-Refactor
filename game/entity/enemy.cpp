@@ -1,17 +1,16 @@
 #include "enemy.h"
+#include "pathfinder.h"   // A* 已搬进 game/world（M3 步 4）
 #include <QtMath>
-#include <queue>
 #include <cmath>
 #include <QRandomGenerator>
 #include <QRectF>
-#include <queue>
-#include <set>
 
 int Enemy::ID = 0;
 
 
 Enemy::Enemy(Map *gameMap, const QPoint &position, int difficulty,
-             const tankcity::config::TankStats &stats)
+             const tankcity::config::TankStats &stats,
+             const tankcity::config::AiDef &ai)
     : Tank(gameMap, stats),       // 调用基类构造函数
     difficulty(difficulty)         // 初始化派生类成员
 {
@@ -21,6 +20,10 @@ Enemy::Enemy(Map *gameMap, const QPoint &position, int difficulty,
     changeDirectionTimer = 0;
     shootTimer = 0;
 
+    // AI 节奏来自 difficulty.json 的 ai 段（M3 步 4 接线；此前写死在头文件里）
+    repathIntervalTicks = ai.repathIntervalTicks;
+    stuckThresholdTicks = ai.stuckThresholdTicks;
+
     // 速度 / 射击间隔 / 血量一律来自 difficulty.json 的对应档位（含 overrides），
     // 见 tankcity::config::resolveEnemyStats()；难度号只作为标识保留（协议与贴图要用）。
 
@@ -29,284 +32,40 @@ Enemy::Enemy(Map *gameMap, const QPoint &position, int difficulty,
 
 bool Enemy::canShoot() const
 {
-    return shootCooldown == 0 && shootTimer == 0;
-}
-
-// 检查位置是否安全（不会卡墙）
-bool Enemy::isSafePosition(const QPoint& worldPos) const {
-    if (!gameMap) return true;
-
-    // 扩大检测区域，避免边缘卡顿
-    QRect testRect(worldPos.x() - 12, worldPos.y() - 12, 24, 24);
-
-    // 检查与墙的碰撞
-    for (const Wall &wall : gameMap->getWalls()) {
-        // 跳过森林和冰块
-        if (wall.getType() == FOREST || wall.getType() == ICE) {
-            continue;
-        }
-
-        // 检查海洋、边界、砖墙和钢墙
-        if (wall.getRect().intersects(testRect)) {
-            // 海洋和不可穿越的墙
-            if (wall.getType() == SEA || wall.getType() == BOUNDARY ||
-                wall.getType() == BRICK || wall.getType() == STEEL) {
-                return false;
-            }
-        }
-    }
-
-    // 额外检查：确保位置在有效地图范围内
-    if (worldPos.x() < 20 || worldPos.y() < 20 ||
-        worldPos.x() > 1200 - 20 ||
-        worldPos.y() > 900 - 20) {
+    if (shootCooldown != 0 || shootTimer != 0)
         return false;
-    }
 
-    return true;
+    // 视线被墙挡住就不开火。否则敌人隔着墙照样射击，看起来就是"对着墙打"——
+    // 实测反馈里的现象之一。判据复用网格走线（一次 Bresenham），代价可忽略。
+    if (lastKnownPlayerPos.isNull())
+        return false;   // 还没 update() 过，不知道玩家在哪
+
+    return gameMap != nullptr
+           && gameMap->isLineWalkable(gameMap->worldToGrid(position),
+                                      gameMap->worldToGrid(lastKnownPlayerPos));
 }
 
 
-// A*寻路节点结构
-struct Node {
-    QPoint gridPos;
-    int g; // 从起点到当前节点的代价
-    int h; // 从当前节点到目标的预估代价
-    Node* parent;
-
-    Node(QPoint pos, int gCost, int hCost, Node* p = nullptr)
-        : gridPos(pos), g(gCost), h(hCost), parent(p) {}
-
-    int f() const { return g + h; }
-
-    // 用于优先队列的比较
-    bool operator>(const Node& other) const {
-        return f() > other.f();
-    }
-};
-
-struct QPointCompare {
-    bool operator()(const QPoint& a, const QPoint& b) const {
-        if (a.x() != b.x()) return a.x() < b.x();
-        return a.y() < b.y();
-    }
-};
 
 void Enemy::calculatePath(const QPoint& playerGridPos)
 {
     path.clear();
     currentPathIndex = -1;
 
-    if (!gameMap) return;
-
-    QPoint startGrid = gameMap->worldToGrid(position);
-    QPoint targetGrid = playerGridPos;
-
-    // 如果起点或终点不可通行，尝试寻找最近的可行点
-    if (!gameMap->isCellWalkable(startGrid.x(), startGrid.y())) {
-        // 寻找最近的可行点
-        for (int r = 1; r <= 5; r++) {
-            for (int dx = -r; dx <= r; dx++) {
-                for (int dy = -r; dy <= r; dy++) {
-                    QPoint testPoint(startGrid.x() + dx, startGrid.y() + dy);
-                    if (gameMap->isCellWalkable(testPoint.x(), testPoint.y())) {
-                        startGrid = testPoint;
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    if (!gameMap->isCellWalkable(targetGrid.x(), targetGrid.y())) {
-        // 寻找最近的可行点
-        for (int r = 1; r <= 5; r++) {
-            for (int dx = -r; dx <= r; dx++) {
-                for (int dy = -r; dy <= r; dy++) {
-                    QPoint testPoint(targetGrid.x() + dx, targetGrid.y() + dy);
-                    if (gameMap->isCellWalkable(testPoint.x(), testPoint.y())) {
-                        targetGrid = testPoint;
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    // 如果已经在目标位置
-    if (startGrid == targetGrid) {
-        path.append(targetGrid);
-        currentPathIndex = 0;
+    if (!gameMap)
         return;
-    }
 
-    // 定义优先队列（最小堆）
-    auto cmp = [](const Node* a, const Node* b) {
-        if (a->f() == b->f()) return a->h > b->h;
-        return a->f() > b->f();
-    };
-    std::priority_queue<Node*, std::vector<Node*>, decltype(cmp)> openSet(cmp);
-    std::set<QPoint, QPointCompare> closedSet;
-    std::unordered_map<int, Node*> allNodes;
+    // 路径由 world 层的 PathFinder 求（M3 步 4：A* 从本类搬进 game/world）。
+    // 本函数只负责"把结果存下来" —— 起点/终点的吸附、斜穿取舍、路径平滑
+    // 都在 PathFinder 里（见 game/world/pathfinder.h）。
+    path = PathFinder::findPath(gameMap->world(),
+                                gameMap->worldToGrid(position),
+                                playerGridPos);
 
-    // 起点节点
-    int startKey = startGrid.x() * 10000 + startGrid.y();
-    Node* startNode = new Node(startGrid, 0,
-                               abs(startGrid.x() - targetGrid.x()) + abs(startGrid.y() - targetGrid.y()));
-    openSet.push(startNode);
-    allNodes[startKey] = startNode;
-
-    // 八方向移动的偏移量
-    const QPoint directions[] = {
-        QPoint(0, -1),  // 上
-        QPoint(1, 0),   // 右
-        QPoint(0, 1),   // 下
-        QPoint(-1, 0),  // 左
-        QPoint(-1, -1), // 左上
-        QPoint(1, -1),  // 右上
-        QPoint(1, 1),   // 右下
-        QPoint(-1, 1)   // 左下
-    };
-
-    Node* targetNode = nullptr;
-
-    while (!openSet.empty()) {
-        Node* currentNode = openSet.top();
-        openSet.pop();
-
-        // 如果找到目标
-        if (currentNode->gridPos == targetGrid) {
-            targetNode = currentNode;
-            break;
-        }
-
-        closedSet.insert(currentNode->gridPos);
-
-        // 检查所有方向
-        for (const auto& dir : directions) {
-            QPoint neighborPos = currentNode->gridPos + dir;
-
-            // 检查邻居是否在网格范围内
-            if (neighborPos.x() < 0 || neighborPos.y() < 0 ||
-                neighborPos.x() >= 30 ||
-                neighborPos.y() >= 22.5) {
-                continue;
-            }
-
-            // 检查邻居是否已在关闭列表
-            if (closedSet.find(neighborPos) != closedSet.end()) {
-                continue;
-            }
-
-            // 检查邻居是否可通行
-            if (!gameMap->isCellWalkable(neighborPos.x(), neighborPos.y())) {
-                continue;
-            }
-
-            // 计算移动代价（对角线移动代价稍高）
-            int moveCost = (abs(dir.x()) + abs(dir.y()) == 2 ? 14 : 10);
-            int newG = currentNode->g + moveCost;
-            int newH = abs(neighborPos.x() - targetGrid.x()) +
-                       abs(neighborPos.y() - targetGrid.y());
-
-            // 检查邻居是否已在开放列表中
-            int neighborKey = neighborPos.x() * 10000 + neighborPos.y();
-            Node* neighborNode = nullptr;
-            if (allNodes.find(neighborKey) != allNodes.end()) {
-                neighborNode = allNodes[neighborKey];
-            }
-
-            // 如果不在开放列表或找到更短路径
-            if (!neighborNode || newG < neighborNode->g) {
-                if (!neighborNode) {
-                    neighborNode = new Node(neighborPos, newG, newH, currentNode);
-                    openSet.push(neighborNode);
-                    allNodes[neighborKey] = neighborNode;
-                } else {
-                    neighborNode->g = newG;
-                    neighborNode->parent = currentNode;
-                    // 需要重新加入优先队列以更新位置
-                    openSet.push(neighborNode);
-                }
-            }
-        }
-    }
-
-    // 如果找到路径，回溯并存储
-    if (targetNode) {
-        Node* node = targetNode;
-        while (node) {
-            path.prepend(node->gridPos);
-            node = node->parent;
-        }
-
-        // 删除起点（已经是当前位置）
-        if (path.size() > 1) {
-            path.removeFirst();
-        }
-
+    if (!path.isEmpty())
         currentPathIndex = 0;
-    }
-
-    // 清理内存
-    for (auto& pair : allNodes) {
-        delete pair.second;
-    }
-
-    // 路径平滑处理 - 简化路径
-    if (path.size() > 2) {
-        QVector<QPoint> simplifiedPath;
-        simplifiedPath.append(path.first());
-
-        int lastValidIndex = 0;
-        for (int i = 1; i < path.size() - 1; i++) {
-            // 检查直线是否畅通
-            if (!gameMap->isLineWalkable(simplifiedPath.last(), path[i+1])) {
-                // 添加一个中间点避免直线障碍
-                if (i - lastValidIndex > 1) {
-                    QPoint midPoint = (simplifiedPath.last() + path[i]) / 2;
-                    if (gameMap->isCellWalkable(midPoint.x(), midPoint.y())) {
-                        simplifiedPath.append(midPoint);
-                    }
-                }
-                simplifiedPath.append(path[i]);
-                lastValidIndex = i;
-            }
-        }
-        simplifiedPath.append(path.last());
-
-        path = simplifiedPath;
-    }
 }
 
-float Enemy::calculateObstacleDistance(const QPoint& pos, Map* map) const
-{
-    float minDistance = std::numeric_limits<float>::max();
-    QRect tankRect(pos.x() - 15, pos.y() - 15, 30, 30);
-
-    for (const Wall &wall : map->getWalls()) {
-        // 跳过可穿越的地形
-        if (wall.getType() == FOREST || wall.getType() == ICE) {
-            continue;
-        }
-
-        if (wall.getRect().intersects(tankRect)) {
-            // 计算到障碍物的距离
-            QRect wallRect = wall.getRect();
-            QPoint center(pos.x(), pos.y());
-            QPoint wallCenter(wallRect.center());
-
-            float distance = std::sqrt(std::pow(center.x() - wallCenter.x(), 2) +
-                                       std::pow(center.y() - wallCenter.y(), 2));
-
-            if (distance < minDistance) {
-                minDistance = distance;
-            }
-        }
-    }
-
-    return (minDistance == std::numeric_limits<float>::max()) ? 1000.0f : minDistance;
-}
 
 
 void Enemy::update(const QPoint &playerPos, Map *map)
@@ -323,154 +82,151 @@ void Enemy::update(const QPoint &playerPos, Map *map)
 
     // 更新路径重新计算计时器
     recalculatePathTimer--;
-    if (recalculatePathTimer <= 0 || path.isEmpty() || stuckTimer > MAX_STUCK_TIME) {
-        recalculatePathTimer = RECALCULATE_PATH_INTERVAL;
+    if (recalculatePathTimer <= 0 || path.isEmpty() || stuckTimer > stuckThresholdTicks) {
+        recalculatePathTimer = repathIntervalTicks;
         stuckTimer = 0;
+        slideSign = 0;              // 新路径：滑动方向重新学
+        resetWaypointProgress();
         calculatePath(map->worldToGrid(playerPos));
     }
 
-    // 如果有路径，沿路径移动
-    if (currentPathIndex >= 0 && currentPathIndex < path.size()) {
-        QPoint targetWorldPos = map->gridToWorld(path[currentPathIndex]);
-        QPointF directionToTarget = targetWorldPos - position;
-        float distanceToTarget = sqrt(directionToTarget.x() * directionToTarget.x() +
-                                      directionToTarget.y() * directionToTarget.y());
+    // ---- 沿路径推进 ----
+    // 玩家位置存一份：canShoot() 用它做视线判定（Game 每帧先 update() 再问 canShoot()）
+    lastKnownPlayerPos = playerPos;
 
-        // 如果接近当前路径点，移动到下一个点
+    // 目标点：路径上的当前格；**最后一段直冲玩家本人**。
+    //
+    // 最后一段为什么不能用格心：路径的终点是"玩家所在格的中心"，而玩家常常贴着墙站，
+    // 那一格在网格里可能被判为不可通行（判据要求格内 40x40 全空，比连续空间的移动判定
+    // 保守），于是终点被吸附到别处。敌人走到那个吸附点后路径就走完了，它会以为已经到位 ——
+    // 表现为站在那儿对着墙打、或者干脆不动，直到玩家挪到空地上才恢复（实测反馈的"无敌点"）。
+    // 网格只负责把它带到附近，最后一两格用连续空间的移动判定（带贴墙滑动）去闭合。
+    QPoint aimPos = playerPos;
+    const bool onLastLeg = currentPathIndex >= 0 && currentPathIndex + 1 >= path.size();
+    if (currentPathIndex >= 0 && currentPathIndex < path.size() && !onLastLeg) {
+        aimPos = map->gridToWorld(path[currentPathIndex]);
+
+        QPointF toTarget = QPointF(aimPos) - QPointF(position);
+        const double distanceToTarget = std::hypot(toTarget.x(), toTarget.y());
+
+        // 到点就推进到下一个路径点（阈值沿用旧的 speed * 2）
         if (distanceToTarget < speed * 2) {
             currentPathIndex++;
             if (currentPathIndex >= path.size()) {
                 calculatePath(map->worldToGrid(playerPos));
                 return;
             }
-            targetWorldPos = map->gridToWorld(path[currentPathIndex]);
-            directionToTarget = targetWorldPos - position;
-            distanceToTarget = sqrt(directionToTarget.x() * directionToTarget.x() +
-                                    directionToTarget.y() * directionToTarget.y());
-        }
-
-        // 计算移动方向
-        if (distanceToTarget > 0) {
-            float moveX = (directionToTarget.x() / distanceToTarget) * speed;
-            float moveY = (directionToTarget.y() / distanceToTarget) * speed;
-            // 更新车身角度
-            bodyAngle = qRadiansToDegrees(qAtan2(moveY, moveX));
-
-            // 应用地形效果：倍率来自 blocks.json 的 moveSpeedFactor
-            // （旧代码这里森林写 0.75、玩家侧写 0.5，同一地形两套数值，M2 起统一；
-            //   无地形影响时为 1.0，乘 1.0f 是精确的，与旧写法一致）
-            const float scale = static_cast<float>(map->getMoveSpeedFactor(position));
-            moveX *= scale;
-            moveY *= scale;
-
-            QPoint newPos = position + QPoint(moveX, moveY);
-
-            // 检查新位置是否安全
-            if (isSafePosition(newPos)) {
-                position = newPos;
-                stuckTimer = 0;
-            } else {
-                // ==== 改进的避障逻辑 - 尝试16个方向 ====
-                QPoint bestPos = position;
-                float maxObstacleDistance = -1;
-                bool foundPath = false;
-
-                // 尝试16个方向 (22.5度间隔)
-                for (int i = 0; i < 16; i++) {
-                    float angle = i * 22.5f;
-                    float rad = qDegreesToRadians(angle);
-                    QPoint testPos = position + QPoint(cos(rad) * speed * 1.5,
-                                                       sin(rad) * speed * 1.5);
-
-                    if (isSafePosition(testPos)) {
-                        // 计算到障碍物的距离
-                        float obstacleDist = calculateObstacleDistance(testPos, map);
-
-                        if (obstacleDist > maxObstacleDistance) {
-                            maxObstacleDistance = obstacleDist;
-                            bestPos = testPos;
-                            foundPath = true;
-                        }
-                    }
-                }
-
-                // 尝试后退方向
-                if (!foundPath) {
-                    float backAngle = bodyAngle + 180.0f;
-                    float rad = qDegreesToRadians(backAngle);
-                    QPoint testPos = position + QPoint(cos(rad) * speed * 1.5,
-                                                       sin(rad) * speed * 1.5);
-                    if (isSafePosition(testPos)) {
-                        bestPos = testPos;
-                        foundPath = true;
-                    }
-                }
-
-                if (foundPath) {
-                    position = bestPos;
-                    stuckTimer = 0;
-                    // 更新车身角度
-                    QPoint moveVec = bestPos - position;
-                    bodyAngle = qRadiansToDegrees(qAtan2(moveVec.y(), moveVec.x()));
-                } else {
-                    stuckTimer++;
-                    // 如果卡住时间过长，重新计算路径
-                    if (stuckTimer > MAX_STUCK_TIME/2) {
-                        recalculatePathTimer = 0;
-                    }
-                }
-            }
-        }
-    } else {
-        // ====== 增强的无路径移动策略 ======
-        // 地形倍率同样来自配置（森林由旧代码的 0.75 统一为 0.5）
-        const float actualSpeed =
-            speed * static_cast<float>(map->getMoveSpeedFactor(position));
-
-        // 计算指向玩家的方向
-        QPointF directionToPlayer = playerPos - position;
-        float distanceToPlayer = sqrt(directionToPlayer.x() * directionToPlayer.x() +
-                                      directionToPlayer.y() * directionToPlayer.y());
-        if (distanceToPlayer > 0) {
-            float moveX = (directionToPlayer.x() / distanceToPlayer) * actualSpeed;
-            float moveY = (directionToPlayer.y() / distanceToPlayer) * actualSpeed;
-
-            // 更新车身角度
-            bodyAngle = qRadiansToDegrees(qAtan2(moveY, moveX));
-
-            QPoint newPos = position + QPoint(moveX, moveY);
-            // 新增：如果直接路径受阻，尝试16个方向
-            if (!isSafePosition(newPos)) {
-                // 尝试16个方向 (22.5度间隔)
-                for (int i = 0; i < 16; i++) {
-                    float angle = i * 22.5f;
-                    float rad = qDegreesToRadians(angle);
-                    QPoint testPos = position + QPoint(cos(rad) * actualSpeed * 1.5,
-                                                       sin(rad) * actualSpeed * 1.5);
-
-                    if (isSafePosition(testPos)) {
-                        newPos = testPos;
-                        // 更新车身角度
-                        QPoint moveVec = testPos - position;
-                        bodyAngle = qRadiansToDegrees(qAtan2(moveVec.y(), moveVec.x()));
-                        break;
-                    }
-                }
-            }
-
-            // 检查新位置是否安全
-            if (isSafePosition(newPos)) {
-                position = newPos;
-            }
+            aimPos = map->gridToWorld(path[currentPathIndex]);
+            resetWaypointProgress();
         }
     }
 
-    // 射击逻辑（保持原样）
-    if (QRandomGenerator::global()->bounded(100) < 40 && canShoot()) {
-        shoot();
-    }
+    advanceTowards(aimPos, map);
+
+    // 这里原有一条 `if (rand < 40 && canShoot()) shoot();`，已删除：
+    //  - 返回值没人接管（`Enemy::shoot()` 返回 `new Bullet(...)`）→ 泄漏一颗子弹，
+    //    而且那颗子弹不会移动也不会被销毁；
+    //  - 它还会设上冷却，把 `Game::updateGame()` 里那一次**真正会广播**的射击挡掉。
+    // 射击统一由 Game 处理（只有它会把子弹登记进 bullets 并广播给客户端）。
 }
 
+void Enemy::resetWaypointProgress()
+{
+    bestDistanceToWaypoint = std::numeric_limits<double>::max();
+    progressTimer = 0;
+}
+
+void Enemy::advanceTowards(const QPoint &targetWorld, Map *map)
+{
+    const QPointF delta = QPointF(targetWorld) - QPointF(position);
+    const double distance = std::hypot(delta.x(), delta.y());
+    if (distance <= 0.0)
+        return;
+
+    // ---- 进度判据：本步的关键修复之一 ----
+    // 判"卡住"不能看"这一帧动没动"，要看"离目标点有没有更近"。
+    // 旧实现是前者：只要 16 向避障里挑到一个能站的位置就把 stuckTimer 清零，
+    // 于是敌人在墙角来回挪**永远不算卡住**，也就永远不会重新寻路 ——
+    // 这正是贴角抽搐可以无限持续下去的原因。改成看进度之后，
+    // "原地来回挪"会在 stuckThresholdTicks 帧内被判为卡住并触发重寻路。
+    if (distance < bestDistanceToWaypoint - 0.5) {
+        bestDistanceToWaypoint = distance;
+        progressTimer = 0;
+    } else if (++progressTimer > stuckThresholdTicks) {
+        recalculatePathTimer = 0;   // 下一帧重新寻路
+        resetWaypointProgress();
+        slideSign = 0;
+        return;
+    }
+
+    const QPointF dir = delta / distance;
+    const double desiredAngle = qRadiansToDegrees(qAtan2(dir.y(), dir.x()));
+
+    // ---- 选方向：在"走得通"的候选里挑**最能缩短到目标距离**的那个（M3 步 4e）----
+    //
+    // 4b 用的是固定顺序（先直行、再按记忆偏 30/60/90），问题是它可能挑到**绕远的那一侧**：
+    // 离路径点越来越远 → 进度判据触发重寻路 → 新路径还是同一条 → 形成极限环，
+    // 表现就是在墙的内角来回震荡（实测反馈）。改成比较"走完之后离目标还剩多远"就不会绕远。
+    const double preferred = (slideSign < 0) ? -1.0 : 1.0;
+    const double candidates[7] = {0.0,
+                                  preferred * 30.0, preferred * 60.0, preferred * 90.0,
+                                  -preferred * 30.0, -preferred * 60.0, -preferred * 90.0};
+
+    double bestOffset = 0.0;
+    double bestScore = std::numeric_limits<double>::max();
+    bool found = false;
+
+    for (double offset : candidates) {
+        const double angle = desiredAngle + offset;
+        // 只查询、不改位置：7 个候选都要先比一比
+        if (!canStep(static_cast<float>(angle), speed, map))
+            continue;
+
+        const double rad = qDegreesToRadians(angle);
+        const QPointF next = QPointF(position) + QPointF(std::cos(rad) * speed, std::sin(rad) * speed);
+        const QPointF remaining = QPointF(targetWorld) - next;
+
+        // 打分 = 走完后的剩余距离 + 转弯代价（每度 0.05px）。
+        // 那点转弯代价极小，只用来让"同分的两个对称方向"稳定地偏向转得少的那个 ——
+        // 没有它，左右两个方向会来回切换，又变成抖动。
+        const double score =
+            std::hypot(remaining.x(), remaining.y()) + std::abs(offset) * 0.05;
+        if (score < bestScore) {
+            bestScore = score;
+            bestOffset = offset;
+            found = true;
+        }
+    }
+
+    if (!found) {
+        // 七个方向全被挡：真的被困住。缩短重寻路间隔（沿用旧的 stuckTimer 语义）
+        stuckTimer++;
+        if (stuckTimer > stuckThresholdTicks / 2)
+            recalculatePathTimer = 0;
+        return;
+    }
+
+    const QPoint before = position;
+    // 走共享的移动判定（Tank::move）：带扫掠、带地形倍率、用配置的碰撞盒。
+    move(static_cast<float>(desiredAngle + bestOffset), speed, map);
+    if (position == before)
+        return;   // 查询与实走不一致（地形倍率会让实走更远/更近），这一帧就不动
+
+    // 车体朝向 = **转向决策的方向**，而不是"这一帧实际走了哪一格"。
+    //
+    // 实际位移是整数像素（斜向每轴只有 0/1 两种取值），拿它算角度会让车体角在相邻两帧
+    // 之间跳变几十度 —— 位置轨迹是对的，但看起来就是"未贴墙时高频左右摆动"（实测反馈）。
+    // 这里取决策方向，既连续稳定，也仍然修住了旧代码那个 bug
+    //（旧代码在避障分支里对 `bestPos - position` 求 atan2，而 position 已被赋值 → 恒 0°，
+    //  一避障车头就朝右跳）。角度按车体的 0-360 约定归一化。
+    bodyAngle = static_cast<float>(std::fmod(desiredAngle + bestOffset + 360.0, 360.0));
+
+    // 记住这次是往哪一侧偏的（直行成功时保留原有记忆）
+    if (bestOffset > 0.0)
+        slideSign = 1;
+    else if (bestOffset < 0.0)
+        slideSign = -1;
+}
 Bullet* Enemy::shoot()
     {
         if (shootCooldown > 0 || shootTimer > 0) return nullptr;
@@ -492,11 +248,6 @@ Bullet* Enemy::shoot()
                               return mapPtr->checkBulletCollision(rect, damage);
                           });
     }
-
-QRect Enemy::getRect() const
-{
-    return QRect(position.x() - 15, position.y() - 15, 30, 30);
-}
 
 
 

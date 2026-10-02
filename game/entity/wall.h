@@ -1,20 +1,12 @@
 #ifndef WALL_H
 #define WALL_H
 
-#define BOUNDARY 0 // 边界类型
-#define BRICK 1
-#define STEEL 2
-#define FOREST 3
-#define SEA 4
-#define ICE 5
-
 #include <QRect>
 #include "config/ConfigTypes.h"
 
 class Wall : public QRect{
 private:
     QRect rect; // 矩形区域
-    int type;   // 墙的类型
     int x;      // x坐标(左上)
     int y;      // y坐标(左上)
     int width;  // 宽度
@@ -26,6 +18,10 @@ private:
     bool blocksTank = true;         // 是否挡坦克
     bool blocksBullet = true;       // 是否挡子弹
     double moveSpeedFactor = 0.0;   // 地形移动倍率（0 表示不影响移动）
+    // 物块 id（blocks.json 的键；边界墙为 "boundary"）。M3 步 5 引入：
+    // 渲染与协议都在往「按 id 走」迁移，int type 与 world.cpp 里的桥接表将随之删除。
+    // 声明在这里是为了与构造函数初始化列表的顺序一致（否则 -Wreorder）。
+    QString block;
 public:
     QRect getRect() const { return rect; } // 获取矩形区域
 
@@ -37,14 +33,16 @@ public:
      */
     static Wall makeBoundary(int x, int y, int width, int height);
 
-    /// 关卡物块：可破坏性 / 生命值 / 三项碰撞开关 / 地形倍率全部来自 BlockDef。
-    Wall(int x, int y, int width, int height, int type,
+    /// 关卡物块：物块 id 与行为（可破坏性 / 生命值 / 三项碰撞开关 / 地形倍率）
+    /// 全部来自 BlockDef。
+    Wall(int x, int y, int width, int height,
          const tankcity::config::BlockDef &def);
 
     ~Wall() = default; // 默认析构函数
 
-    int getType() const { return type; } // 获取墙的类型
-    void setType(int t) { type = t; } // 设置墙的类型
+    /// 物块 id（blocks.json 的键；边界墙是 "boundary"）。
+    /// M3 步 5 起渲染与协议都按它走 —— 那个跨进程约定的类型号已经没有存在的必要。
+    QString getBlockId() const { return block; }
     bool isDestructible() const { return destructible; } // 是否可破坏（配置）
     bool isBlockingTank() const { return blocksTank; }   // 是否挡坦克（配置）
     bool isBlockingBullet() const { return blocksBullet; } // 是否挡子弹（配置）

@@ -32,6 +32,12 @@ struct TankStats {
     int bulletDamage = 1;
     int muzzleOffset = 0;        ///< 炮口相对车体中心的距离（像素）
 
+    /// 移动探测盒（像素），默认 40×40。来自 entities.json 每辆坦克的 `collisionBox`。
+    /// M3 决议 D4：手感相关的数值一律只存在于 JSON 里，改数值不需要重编译 ——
+    /// 在此之前 `Tank::move()` 把 40 写死在代码里，配置里的 collisionBox 是死数据。
+    int collisionBoxW = 40;
+    int collisionBoxH = 40;
+
     /// 打爆它需要命中几发（向上取整）。旧代码的等价值靠它来核对。
     int hitsToDestroy() const
     {
