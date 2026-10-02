@@ -267,6 +267,31 @@ TEST(PlayerShooting, CooldownTicksSoThePlayerCanFireAgain) {
 }
 
 /**
+ * 位移被倍率压到 1px 以下时，必须**随时间累加**，不能逐帧丢掉。
+ *
+ * 实测病灶：森林（×0.5）上的敌人斜向位移是 `2.5 × 0.707 ≈ 1.77px`，向零截断后更慢时
+ * 直接成 0 → 整帧位移消失，表现为"站在森林上不动"。这里用"低速 + 斜向 + 空场"
+ * 复现同一算术，不依赖关卡数据。
+ */
+TEST(PlayerMovement, SubPixelStepsStillAccumulate) {
+    Map map;
+    auto player = makePlayer(&map, 1.25);   // 斜向每轴 0.88px → 单帧截断为零
+    const QPoint start = player->getPosition();
+
+    for (int i = 0; i < 100; ++i) {
+        player->setMoveVector(QPointF(1, 1));
+        player->update();
+    }
+
+    const QPoint delta = player->getPosition() - start;
+    const double distance =
+        std::hypot(static_cast<double>(delta.x()), static_cast<double>(delta.y()));
+
+    EXPECT_GT(distance, 1.0) << "位移被截成 0，整帧丢失 —— 这就是森林上站桩的成因";
+    EXPECT_NEAR(distance, 125.0, 3.0) << "100 帧 × 1.25px 应走满 125px";
+}
+
+/**
  * 受击盒与移动探针同尺寸（D4 的「统一」）。
  *
  * 在此之前 `getRect()` 返回 30×30、移动探针却是 40×40 —— 子弹擦着车身飞过去不命中。

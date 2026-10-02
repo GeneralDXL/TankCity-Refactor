@@ -55,7 +55,7 @@ public:
      */
     bool canStep(float angle, float distance, Map *map) const;
 
-    void setPosition(const QPoint& pos) { position = pos; }
+    void setPosition(const QPoint& pos) { position = pos; moveRemainder_ = QPointF(); }
     void setBodyAngle(float angle) { bodyAngle = angle; } // 车身角度设置
     float getBodyAngle() const { return bodyAngle; } // 车身角度获取
 
@@ -83,6 +83,16 @@ protected:
     Map *gameMap = nullptr;
 
 private:
+    /**
+     * 亚像素余量：上一帧没走完的、不足 1 像素的位移。
+     *
+     * 位移经常不足 1px —— 森林（×0.5）上的敌人斜向走只有 `2.5 × 0.707 ≈ 1.77px`，
+     * 向零截断后只剩 1；倍率再小一点就直接截成 0，**整帧位移消失**，
+     * 表现就是"站在森林上不动"（实测反馈）。把余量带到下一帧累加，
+     * 长距离的平均位移就不再受逐帧取整影响。
+     */
+    QPointF moveRemainder_;
+
     /// 以 center 为中心、按配置尺寸构造探测矩形。
     QRect probeRect(const QPoint &center) const;
 

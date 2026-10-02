@@ -40,9 +40,15 @@ void Tank::move(float angle, float distance, Map *map)
     const double stepX = std::cos(rad) * distance * scale;
     const double stepY = std::sin(rad) * distance * scale;
 
-    // 本帧终点：与旧实现逐位一致（`position + QPoint(stepX, stepY)`，向零截断）。
-    // 扫掠**不改动这条算术** —— 它只改变「怎么判定能不能过去」。
-    const QPoint target = position + QPoint(stepX, stepY);
+    // 亚像素余量：位移常常不足 1px（森林 ×0.5 上的敌人斜向只有 2.5*0.707 ≈ 1.77px，
+    // 更慢或倍率更小时直接为 0），逐帧向零截断会把整帧丢掉 —— 实测表现就是
+    // "站在森林上不动"。把上帧余量加进来、把本帧没走完的留到下一帧，
+    // 平均位移才等于速度 × 帧数（且不会像四舍五入那样凭空多走，没有加速漏洞）。
+    const QPointF wanted = QPointF(stepX, stepY) + moveRemainder_;
+    const QPoint intended(static_cast<int>(wanted.x()), static_cast<int>(wanted.y()));
+
+    // 本帧终点：向零截断，与旧实现同一口径（余量为 0 时逐位一致）。
+    const QPoint target = position + intended;
 
     // 扫掠（M3 决议 D3）：把这一帧摊到若干子步上逐点判定。
     //
@@ -53,7 +59,8 @@ void Tank::move(float angle, float distance, Map *map)
     // 当前配置（盒 40、速度 5）算出来正好是 1 个子步，也就是说与旧实现走的是同一条路：
     // 这是给「将来把盒子配小、速度配大」留的保险，而不是在修当下已发生的穿模。
     const double maxSubStep = std::max(1.0, std::min(collisionBoxW, collisionBoxH) / 2.0);
-    const double length = std::hypot(stepX, stepY);
+    const double length = std::hypot(static_cast<double>(intended.x()),
+                                     static_cast<double>(intended.y()));
     const int subSteps = std::min(kMaxSubSteps,
                                   std::max(1, static_cast<int>(std::ceil(length / maxSubStep))));
 
@@ -64,10 +71,20 @@ void Tank::move(float angle, float distance, Map *map)
         // 末点写死成 target，就保证了「走了多远」与旧实现完全一致，变的只是判定密度。
         const QPoint probe = (i == subSteps)
                                  ? target
-                                 : position + QPoint(stepX * i / subSteps, stepY * i / subSteps);
+                                 : position + QPoint(intended.x() * i / subSteps,
+                                                     intended.y() * i / subSteps);
         if (!isPassable(probeRect(probe), map))
             break;
         reached = probe;
+    }
+
+    if (reached == target) {
+        // 完整走完：把不足 1px 的部分留到下一帧
+        moveRemainder_ = wanted - QPointF(intended);
+    } else {
+        // 被挡下／只走到中途：余量作废 —— 否则顶着墙一直攒位移，
+        // 一转身就会把那笔"欠账"一次性释放（瞬移）。
+        moveRemainder_ = QPointF();
     }
 
     // 被拦下时停在最后一个可通行子步；在当前配置下 subSteps 恒为 1，
@@ -89,14 +106,21 @@ QRect Tank::getRect() const
 
 bool Tank::canStep(float angle, float distance, Map *map) const
 {
+    // 与 move() 用同一套算术（含地形倍率与亚像素余量），否则会出现
+    // "查询说能走、实走却原地不动"，转向逻辑就会被骗进死角。
+    const float scale = static_cast<float>(map->getMoveSpeedFactor(position));
     const double rad = qDegreesToRadians(static_cast<double>(angle));
-    const QPoint target = position + QPoint(std::cos(rad) * distance, std::sin(rad) * distance);
+    const QPointF wanted = QPointF(std::cos(rad) * distance * scale,
+                                   std::sin(rad) * distance * scale) + moveRemainder_;
+    const QPoint intended(static_cast<int>(wanted.x()), static_cast<int>(wanted.y()));
 
-    // 步长不足一像素时目标格就是当前格，直接算走得通 —— 否则会被自己挡下
-    if (target == position)
-        return true;
+    // 本帧根本不足 1px：**如实回报走不了**。
+    // 这里以前返回 true（当时的想法是"别把自己挡下"），结果转向逻辑会挑中一个
+    // "看着能走、实际原地不动"的方向 —— 那正是森林上站桩的直接原因。
+    if (intended.isNull())
+        return false;
 
-    return isPassable(probeRect(target), map);
+    return isPassable(probeRect(position + intended), map);
 }
 
 bool Tank::isPassable(const QRect &probe, Map *map) const
