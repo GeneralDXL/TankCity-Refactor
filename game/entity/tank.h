@@ -54,19 +54,22 @@ public:
 
 protected:
     QPoint position;
-    Direction direction;
+    Direction direction = Up;
     float bodyAngle = 0; // 车身角度
-    int health;
-    float speed;
+    int health = 0;
+    float speed = 0.0f;
     double bulletSpeed = 0.0;  // 子弹速度（像素/帧）
     int bulletDamage = 1;      // 子弹伤害
     int muzzleOffset = 0;      // 炮口相对车体中心的距离（像素）
-    int shootCooldown;
-    int shootDelay;
+    // 一律给默认值：漏进初始化列表就是未初始化的栈垃圾 ——
+    // M3 步 3b 重写本文件时漏掉 `shootDelay(stats.shootDelayTicks)`，
+    // 症状就是"打完一发再也打不出来"（`shootCooldown = shootDelay` 变成随机值）。
+    int shootCooldown = 0;
+    int shootDelay = 0;
     float turretAngle = 0;  // 炮管角度
     int collisionBoxW = 40; // 移动探测盒宽（配置 collisionBox[0]）
     int collisionBoxH = 40; // 移动探测盒高（配置 collisionBox[1]）
-    Map *gameMap;
+    Map *gameMap = nullptr;
 
 private:
     /// 以 center 为中心、按配置尺寸构造探测矩形。

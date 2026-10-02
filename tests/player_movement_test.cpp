@@ -235,6 +235,38 @@ TEST(PlayerMovement, CollisionBoxComesFromStats) {
 }
 
 /**
+ * 打完一发之后，冷却走完必须能再打 —— 钉住"只能打一次"这类回归。
+ *
+ * 背景：M3 步 4b 把 `shootCooldown--` 从 `Tank::move()` 里移出来，改由
+ * `Player::updateMovement()` 每帧推进一次。移动函数不再顺手减计时器是对的，
+ * 但一旦哪里漏了这一步，症状就是"第一次能开火，之后永远开不了火"。
+ * 这条用例逐帧检查，任何一类"冷却不推进"都会在这里露出来。
+ */
+TEST(PlayerShooting, CooldownTicksSoThePlayerCanFireAgain) {
+    Map map;
+    auto player = makePlayer(&map, 5.0);   // 配置里玩家 shootDelayTicks = 10
+
+    ASSERT_TRUE(player->canShoot()) << "开局就不能开火";
+
+    Bullet *first = player->shoot();
+    ASSERT_NE(first, nullptr) << "第一发打不出来";
+    delete first;   // Player::shoot() 把所有权交给调用方（服务端放进 bullets 里）
+
+    EXPECT_FALSE(player->canShoot()) << "刚打完就能再打，冷却没生效";
+
+    // 冷却 10 帧：第 10 帧之后必须恢复
+    for (int frame = 0; frame < 10; ++frame)
+        player->update();
+
+    EXPECT_TRUE(player->canShoot())
+        << "冷却没有随帧推进 —— 表现为\"攻击一次后无法再次攻击\"";
+
+    Bullet *second = player->shoot();
+    EXPECT_NE(second, nullptr) << "第二发打不出来";
+    delete second;
+}
+
+/**
  * 受击盒与移动探针同尺寸（D4 的「统一」）。
  *
  * 在此之前 `getRect()` 返回 30×30、移动探针却是 40×40 —— 子弹擦着车身飞过去不命中。
