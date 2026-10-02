@@ -26,6 +26,10 @@ private:
     bool blocksTank = true;         // 是否挡坦克
     bool blocksBullet = true;       // 是否挡子弹
     double moveSpeedFactor = 0.0;   // 地形移动倍率（0 表示不影响移动）
+    // 物块 id（blocks.json 的键；边界墙为 "boundary"）。M3 步 5 引入：
+    // 渲染与协议都在往「按 id 走」迁移，int type 与 world.cpp 里的桥接表将随之删除。
+    // 声明在这里是为了与构造函数初始化列表的顺序一致（否则 -Wreorder）。
+    QString block;
 public:
     QRect getRect() const { return rect; } // 获取矩形区域
 
@@ -45,6 +49,8 @@ public:
 
     int getType() const { return type; } // 获取墙的类型
     void setType(int t) { type = t; } // 设置墙的类型
+    /// 物块 id（blocks.json 的键）。M3 步 5 起，渲染与协议都按它走。
+    QString getBlockId() const { return block; }
     bool isDestructible() const { return destructible; } // 是否可破坏（配置）
     bool isBlockingTank() const { return blocksTank; }   // 是否挡坦克（配置）
     bool isBlockingBullet() const { return blocksBullet; } // 是否挡子弹（配置）
