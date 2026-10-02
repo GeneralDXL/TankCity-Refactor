@@ -44,6 +44,17 @@ public:
      */
     QRect getRect() const;
 
+    /**
+     * 朝 @p angle 走 @p distance 会不会撞上 —— **只查询，不改位置**。
+     *
+     * 与 `move()` 用同一套判定（同一个探测盒、同一个 `isPassable`），区别是它没有副作用。
+     * 敌人转向需要"先比较几个候选方向再决定走哪个"，所以必须有这样一个查询：
+     * M3 步 3b 曾把语义相同的 `canMove()` 当重复代码删掉，4e 把它以正确的形态加回来
+     * —— 当时删是对的（它和 `move()` 里的 switch 是同一谓词的两份），
+     * 现在需要的是**查询**，不是第二份判定。
+     */
+    bool canStep(float angle, float distance, Map *map) const;
+
     void setPosition(const QPoint& pos) { position = pos; }
     void setBodyAngle(float angle) { bodyAngle = angle; } // 车身角度设置
     float getBodyAngle() const { return bodyAngle; } // 车身角度获取

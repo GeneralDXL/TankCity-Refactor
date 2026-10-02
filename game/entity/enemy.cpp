@@ -162,42 +162,68 @@ void Enemy::advanceTowards(const QPoint &targetWorld, Map *map)
     const QPointF dir = delta / distance;
     const double desiredAngle = qRadiansToDegrees(qAtan2(dir.y(), dir.x()));
 
-    // ---- 贴墙滑动：确定顺序 + 带记忆（本步的关键修复之二）----
-    // 0（直行）永远排第一；其余偏转角按"上次成功的那一侧优先"排。
-    // 记忆是重点：旧实现每帧在 16 个方向里重挑"离障碍最远"的那个，
-    // 位置稍变就可能换一个方向，于是贴角时左右横跳。这里只会一直往同一侧滑。
+    // ---- 选方向：在"走得通"的候选里挑**最能缩短到目标距离**的那个（M3 步 4e）----
+    //
+    // 4b 用的是固定顺序（先直行、再按记忆偏 30/60/90），问题是它可能挑到**绕远的那一侧**：
+    // 离路径点越来越远 → 进度判据触发重寻路 → 新路径还是同一条 → 形成极限环，
+    // 表现就是在墙的内角来回震荡（实测反馈）。改成比较"走完之后离目标还剩多远"就不会绕远。
     const double preferred = (slideSign < 0) ? -1.0 : 1.0;
-    const double offsets[7] = {0.0,
-                               preferred * 30.0, preferred * 60.0, preferred * 90.0,
-                               -preferred * 30.0, -preferred * 60.0, -preferred * 90.0};
+    const double candidates[7] = {0.0,
+                                  preferred * 30.0, preferred * 60.0, preferred * 90.0,
+                                  -preferred * 30.0, -preferred * 60.0, -preferred * 90.0};
 
-    const QPoint before = position;
-    for (double offset : offsets) {
-        // 走共享的移动判定（Tank::move）：带扫掠、带地形倍率、用配置的碰撞盒。
-        // 旧实现绕开了它直接改 position，所以 3b 的扫掠对敌人根本没生效。
-        move(static_cast<float>(desiredAngle + offset), speed, map);
-        if (position == before)
-            continue;   // 这个方向被挡下了，试下一个
+    double bestOffset = 0.0;
+    double bestScore = std::numeric_limits<double>::max();
+    bool found = false;
 
-        // 车体朝向 = **实际位移**方向。
-        // 旧实现在避障分支里算的是 `bestPos - position`，而 position 在那之前
-        // 已被赋值成 bestPos，于是恒为 atan2(0, 0) = 0 —— 一避障车头就朝右跳。
-        const QPoint moved = position - before;
-        bodyAngle = static_cast<float>(
-            qRadiansToDegrees(qAtan2(static_cast<double>(moved.y()), static_cast<double>(moved.x()))));
+    for (double offset : candidates) {
+        const double angle = desiredAngle + offset;
+        // 只查询、不改位置：7 个候选都要先比一比
+        if (!canStep(static_cast<float>(angle), speed, map))
+            continue;
 
-        // 记住这次是往哪一侧偏的（直行成功时保留原有记忆）
-        if (offset > 0.0)
-            slideSign = 1;
-        else if (offset < 0.0)
-            slideSign = -1;
+        const double rad = qDegreesToRadians(angle);
+        const QPointF next = QPointF(position) + QPointF(std::cos(rad) * speed, std::sin(rad) * speed);
+        const QPointF remaining = QPointF(targetWorld) - next;
+
+        // 打分 = 走完后的剩余距离 + 转弯代价（每度 0.05px）。
+        // 那点转弯代价极小，只用来让"同分的两个对称方向"稳定地偏向转得少的那个 ——
+        // 没有它，左右两个方向会来回切换，又变成抖动。
+        const double score =
+            std::hypot(remaining.x(), remaining.y()) + std::abs(offset) * 0.05;
+        if (score < bestScore) {
+            bestScore = score;
+            bestOffset = offset;
+            found = true;
+        }
+    }
+
+    if (!found) {
+        // 七个方向全被挡：真的被困住。缩短重寻路间隔（沿用旧的 stuckTimer 语义）
+        stuckTimer++;
+        if (stuckTimer > stuckThresholdTicks / 2)
+            recalculatePathTimer = 0;
         return;
     }
 
-    // 七个方向全被挡：真的被困住。缩短重寻路间隔（沿用旧的 stuckTimer 语义）
-    stuckTimer++;
-    if (stuckTimer > stuckThresholdTicks / 2)
-        recalculatePathTimer = 0;
+    const QPoint before = position;
+    // 走共享的移动判定（Tank::move）：带扫掠、带地形倍率、用配置的碰撞盒。
+    move(static_cast<float>(desiredAngle + bestOffset), speed, map);
+    if (position == before)
+        return;   // 查询与实走不一致（地形倍率会让实走更远/更近），这一帧就不动
+
+    // 车体朝向 = **实际位移**方向。
+    // 旧实现在避障分支里算的是 `bestPos - position`，而 position 在那之前
+    // 已被赋值成 bestPos，于是恒为 atan2(0, 0) = 0 —— 一避障车头就朝右跳。
+    const QPoint moved = position - before;
+    bodyAngle = static_cast<float>(
+        qRadiansToDegrees(qAtan2(static_cast<double>(moved.y()), static_cast<double>(moved.x()))));
+
+    // 记住这次是往哪一侧偏的（直行成功时保留原有记忆）
+    if (bestOffset > 0.0)
+        slideSign = 1;
+    else if (bestOffset < 0.0)
+        slideSign = -1;
 }
 Bullet* Enemy::shoot()
     {

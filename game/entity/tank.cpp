@@ -87,6 +87,18 @@ QRect Tank::getRect() const
     return probeRect(position);
 }
 
+bool Tank::canStep(float angle, float distance, Map *map) const
+{
+    const double rad = qDegreesToRadians(static_cast<double>(angle));
+    const QPoint target = position + QPoint(std::cos(rad) * distance, std::sin(rad) * distance);
+
+    // 步长不足一像素时目标格就是当前格，直接算走得通 —— 否则会被自己挡下
+    if (target == position)
+        return true;
+
+    return isPassable(probeRect(target), map);
+}
+
 bool Tank::isPassable(const QRect &probe, Map *map) const
 {
     const int type = map->checkTankCollision(probe, this);
