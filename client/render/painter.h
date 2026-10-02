@@ -11,13 +11,20 @@
 
 class WallPainter {
 public:
-    WallPainter(int x, int y, int width, int height, int type, int id);
+    /**
+     * @param block 物块 id（`blocks.json` 的键；边界墙是 `"boundary"`）。
+     *
+     * M3 步 5 起客户端按 id 查贴图表（见 painter.cpp 的 kBlockTextures）。
+     * 在此之前这里存的是一个**跨进程约定的类型号** —— 两边的数字对不上，
+     * 编译器不会报错、测试也测不出，只会表现为"某个物块显示成别的贴图"。
+     */
+    WallPainter(int x, int y, int width, int height, const QString &block, int id);
     QRect getRect() const { return QRect(x, y, width, height); } // 获取矩形区域
     int getId() const { return id; } // 获取墙的唯一ID
-    int getType()const {return type;};
+    QString getBlockId() const { return block; }
 
 private:
-    int type;   // 墙的类型
+    QString block;  // 物块 id（不再是类型号）
     int x;      // x坐标(左上)
     int y;      // y坐标(左上)
     int width;  // 宽度

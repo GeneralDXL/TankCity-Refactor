@@ -358,9 +358,10 @@ void GameWindow::onReadyRead()
             for (const QJsonValue &wallValue : wallArray)
             {
                 const client::net::WallState state = client::net::parseWall(wallValue.toObject());
+                // M3 步 5：按物块 id 构造 —— 客户端据此查贴图表，不再依赖跨进程的类型号
                 gameMap->addWall(WallPainter(state.rect.x(), state.rect.y(),
                                              state.rect.width(), state.rect.height(),
-                                             state.type, state.id));
+                                             state.block, state.id));
             }
 
         }

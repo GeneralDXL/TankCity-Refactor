@@ -3,8 +3,8 @@
 #include<QDateTime>
 #include <cmath>
 
-WallPainter::WallPainter(int x, int y, int width, int height, int type, int id)
-    : x(x), y(y), width(width), height(height), type(type), id(id)
+WallPainter::WallPainter(int x, int y, int width, int height, const QString &block, int id)
+    : block(block), x(x), y(y), width(width), height(height), id(id)
 {}
 
 MapPainter::MapPainter()
@@ -15,29 +15,33 @@ MapPainter::MapPainter()
 
 namespace {
 
-/// 物块类型 -> 贴图路径（相对资源根目录）。
+/// 物块 id -> 贴图路径（相对资源根目录）。
 ///
-/// **这张表就是 M6 换贴图时唯一要改的地方**。类型号的含义来自服务端协议里的
-/// `wallType`（边界 0 / 砖 1 / 钢 2 / 森林 3 / 海 4 / 冰 5），客户端不 include
-/// `game/entity/wall.h` —— 两个程序只通过 JSON 字段对齐（见 M1.1 决议 D4）。
+/// **这张表就是 M6 换贴图时唯一要改的地方**。键是 `blocks.json` 里的物块 id，
+/// 边界墙用固定 id `"boundary"`。客户端仍然不 include `game/entity/wall.h`
+/// —— 两个程序只通过 JSON 字段对齐（见 M1.1 决议 D4）；但**对齐的是 id 而不是数字**，
+/// 所以新增物块只需在 blocks.json 里登记，不必再让两边"把编号约定对上"。
 struct BlockTextureEntry
 {
-    int type;
+    const char *block;
     const char *path;
 };
 
 const BlockTextureEntry kBlockTextures[] = {
-    {1, "images/textures/brick.jpg"},
-    {2, "images/textures/steel.jpg"},
-    {3, "images/textures/forest.jpg"},
-    {4, "images/textures/sea.jpg"},
-    {5, "images/textures/ice.jpg"},
+    {"brick", "images/textures/brick.jpg"},
+    {"steel", "images/textures/steel.jpg"},
+    {"forest", "images/textures/forest.jpg"},
+    {"sea", "images/textures/sea.jpg"},
+    {"ice", "images/textures/ice.jpg"},
 };
 
-const char *texturePathOfType(int type)
+/// 边界墙的物块 id（引擎的固定约定，不由 blocks.json 描述）。
+const QLatin1String kBoundaryBlock("boundary");
+
+const char *texturePathOfBlock(const QString &block)
 {
     for (const BlockTextureEntry &entry : kBlockTextures) {
-        if (entry.type == type)
+        if (block == QLatin1String(entry.block))
             return entry.path;
     }
     return nullptr;
@@ -50,16 +54,17 @@ void MapPainter::draw(engine::render::IRenderer &renderer, engine::render::Textu
     for (const WallPainter &wall : walls)
     {
         const QRect rect = wall.getRect();
-        const int type = wall.getType();
+        const QString block = wall.getBlockId();
 
-        if (type == 0) {
-            // 旧代码这一支是 `setBrush(灰) + drawRect`，当时的画笔是 QPainter 的默认黑笔，
-            // 所以实际画的是「灰底 + 黑边」。只填充不描边会丢掉那圈边框，故两个颜色都给。
+        if (block == kBoundaryBlock) {
+            // 边界不走贴图：灰底 + 黑边。与旧实现是**同一组颜色**，别动 —— 画面基线靠它。
+            // （旧代码这一支是 `setBrush(灰) + drawRect`，当时的画笔是 QPainter 的默认黑笔，
+            //   所以实际画的是「灰底 + 黑边」。只填充不描边会丢掉那圈边框，故两个颜色都给。）
             renderer.drawRect(rect, QColor(150, 150, 150), Qt::black);
             continue;
         }
 
-        const char *path = texturePathOfType(type);
+        const char *path = texturePathOfBlock(block);
         if (path == nullptr)
             continue;   // 未知类型：旧 switch 没有 default，同样什么都不画
 
