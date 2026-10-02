@@ -7,7 +7,7 @@
  *
  * 为什么这些用例不需要配置或关卡文件：空 `Map` 上
  *  - `getMoveSpeedFactor()` 找不到物块，返回 1.0（无地形影响）；
- *  - `checkTankCollision()` 找不到物块，返回 -1（无碰撞）；
+ *  - `blocksTankAt()` 找不到物块，返回 false（不挡）；
  * 于是 `Tank::move()` 退化为纯运动学 —— 正是本文件要验证的那部分。
  * `TankStats` 是纯数据结构，直接构造即可，不必走 ConfigLoader。
  */

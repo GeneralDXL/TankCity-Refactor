@@ -125,14 +125,14 @@ bool Tank::canStep(float angle, float distance, Map *map) const
 
 bool Tank::isPassable(const QRect &probe, Map *map) const
 {
-    // 只判「有没有撞到挡车的物块」。
+    // 只判「有没有挡车的物块」。
     //
     // 旧写法还白名单了 FOREST / ICE —— 那两条是**死逻辑**：它们 blocksTank=false，
     // 压根不进碰撞世界（见 World::rebuildCollisionWorld 里 flags==0 的跳过），
-    // 所以 checkTankCollision 永远不会返回它们，实际只有 -1（无碰撞）可达。
-    // 删掉之后，这条判定里不再出现任何地形名 —— 「什么能挡车」完全由 blocks.json 决定，
+    // 所以那条查询永远不会返回它们。
+    // 现在这条判定里不出现任何地形名 —— 「什么能挡车」完全由 blocks.json 决定，
     // 新增地形不必再改这里。
-    return map->checkTankCollision(probe, this) == -1;
+    return !map->blocksTankAt(probe);
 }
 
 void Tank::takeDamage(int amount)

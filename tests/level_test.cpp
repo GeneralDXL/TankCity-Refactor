@@ -576,7 +576,8 @@ TEST(MapLoad, JsonDrivenMapReproducesLegacyWallSet)
 
 namespace {
 
-/// `Map::checkTankCollision` 会跳过的地形（坦克能穿过）。
+/// 坦克能穿过的地形：`blocksTank=false` 的物块不进碰撞世界，所以拦住坦克的查询
+/// 永远看不到它们（见 World::rebuildCollisionWorld）。
 bool tankSees(int type)
 {
     return type != FOREST && type != ICE;
@@ -614,7 +615,7 @@ QVector<TypedRect> legacyWallsOf(const QJsonObject &level)
 /**
  * 旧代码按 case 内 append 的顺序、新代码按图层分组，两者的 walls 顺序不同。
  *
- * `checkBulletCollision` / `checkTankCollision` 都是「首个命中即返回」，顺序一变就可能
+ * `checkBulletCollision` / `blocksTankAt` 都是「首个命中即返回」，顺序一变就可能
  * 改变行为（打中哪块砖、踩在哪层地形上）。本用例不去复刻这两个函数，而是直接守住使它们
  * 无法观察差异的结构性前提：
  *

@@ -74,21 +74,25 @@ public:
     bool isCellWalkable(int gridX, int gridY) const;
     bool isLineWalkable(const QPoint &start, const QPoint &end) const;
     QPoint gridToWorld(const QPoint &gridPos) const;
-    int getTerrainType(const QPoint &position) const;
 
     /**
      * 该位置的地形移动倍率，1.0 表示不受影响。
      *
      * 取自 blocks.json 的 `moveSpeedFactor`（森林 0.5、冰 1.5；0 表示该物块不影响
-     * 移动）。取「首个包含该点的墙体」与旧的 getTerrainType 同序，故结果一致。
+     * 移动）。取「首个包含该点的墙体」，与旧实现同序。
      */
     double getMoveSpeedFactor(const QPoint &position) const;
 
     /// 是否有物块挡住这个矩形（只判「挡移动」标记，见 kBlocksMove）。
     bool checkCollision(const QRect &rect) const;
 
-    /// @param tank 目前未使用（旧签名如此，调用方仍传）；保留以备 M3 按体型判定。
-    int checkTankCollision(const QRect &rect, const Tank *tank) const;
+    /// 这个矩形所在位置有没有挡坦克的物块（只判 `blocksTank` 标记，见 kBlocksMove）。
+    ///
+    /// M3 步 5：旧签名返回"撞到的那个墙的**类型号**"，调用方却只用它判"有没有碰撞"
+    /// （类型名白名单那两条其实是死逻辑）。类型号消失后这个返回值没有意义，故改成 bool。
+    /// 同时去掉了那个 `const Tank *` 形参 —— D4 提过的"按体型区分"始终没做，
+    /// 没必要让每个调用方都传一个用不上的指针。
+    bool blocksTankAt(const QRect &rect) const;
 
     /**
      * 首个挡子弹的物块 id（没有则 -1）。

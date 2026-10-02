@@ -127,7 +127,7 @@ void setupMaze(MazeFixture &fixture, int levelIndex = 3)
  * 病灶在偏离格心的位置：坦克站在离墙 20px 处站得住，可它的格心却可能落在墙的探测范围里，
  * 于是"玩家所在格"不可通行，路径终点被吸附到别处。
  *
- * 判据两侧刻意用不同口径：连续侧用 `Map::checkTankCollision`（移动真正用的判定），
+ * 判据两侧刻意用不同口径：连续侧用 `Map::blocksTankAt`（移动真正用的判定），
  * 网格侧用 `isCellWalkable`。二者不一致的地方，正是敌人找不着玩家的地方。
  */
 bool findInvincibilitySpot(Map &map, const QPoint &farFrom, QPoint &out)
@@ -139,7 +139,7 @@ bool findInvincibilitySpot(Map &map, const QPoint &farFrom, QPoint &out)
     for (int py = 30; py < Map::MAP_HEIGHT - 30; py += 5) {
         for (int px = 30; px < Map::MAP_WIDTH - 30; px += 5) {
             const QRect probe(px - 20, py - 20, 40, 40);
-            if (map.checkTankCollision(probe, nullptr) != -1)
+            if (map.blocksTankAt(probe))
                 continue;   // 连续空间站不住，跳过
 
             const QPoint cell = world.worldToGrid(QPoint(px, py));

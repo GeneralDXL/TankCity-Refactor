@@ -155,22 +155,17 @@ bool World::checkCollision(const QRect &rect) const
     return blocked;
 }
 
-int World::checkTankCollision(const QRect &rect, const Tank *tank) const
+bool World::blocksTankAt(const QRect &rect) const
 {
-    Q_UNUSED(tank);   // 旧签名保留：M3 可能按体型区分，目前判定与调用方无关
-
-    int wallType = -1;
+    bool blocked = false;
     world_.forEachOverlap(engine::physics::Aabb::fromRect(rect), kBlocksMove,
-                          [this, &wallType](const engine::physics::CollisionWorld::Body &body) {
-        // 是否挡坦克由 blocks.json 的 blocksTank 决定（森林、冰块为 false）。
-        // 旧代码把海洋单列一支，返回的也是 SEA，与这里返回 getType() 等价。
-        const Wall *wall = wallById(body.id);
-        if (wall == nullptr)
-            return true;
-        wallType = wall->getType(); // 返回墙的类型
-        return false;
+                          [&blocked](const engine::physics::CollisionWorld::Body &) {
+        // 是否挡坦克由 blocks.json 的 blocksTank 决定（森林、冰块为 false）——
+        // 那一条已在标记里筛掉（见 flagsOf），这里只需回答"有没有"。
+        blocked = true;
+        return false;   // 首个命中即返回
     });
-    return wallType; // -1 表示无碰撞
+    return blocked;
 }
 
 int World::firstShotBlockerId(const QRect &rect) const
@@ -220,17 +215,6 @@ bool World::isLineWalkable(const QPoint &start, const QPoint &end) const
 QPoint World::gridToWorld(const QPoint &gridPos) const
 {
     return grid_.toWorld(gridPos);
-}
-
-int World::getTerrainType(const QPoint &position) const
-{
-    // 地形采样（不是碰撞查询）：按插入顺序取**首个包含该点**的物块，与旧实现同序。
-    for (const Wall &wall : walls) {
-        if (wall.contains(position)) {
-            return wall.getType();
-        }
-    }
-    return -1; // 默认地形
 }
 
 double World::getMoveSpeedFactor(const QPoint &position) const

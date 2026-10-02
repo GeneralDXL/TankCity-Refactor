@@ -57,7 +57,6 @@ public:
     {
         return world_.isLineWalkable(start, end);
     }
-    int getTerrainType(const QPoint &position) const { return world_.getTerrainType(position); }
     double getMoveSpeedFactor(const QPoint &position) const
     {
         return world_.getMoveSpeedFactor(position);
@@ -65,11 +64,8 @@ public:
 
     bool checkCollision(const QRect &rect) const { return world_.checkCollision(rect); }
 
-    /// @param tank 透传给 `World::checkTankCollision`（目前未使用，见其说明）。
-    int checkTankCollision(const QRect &rect, const Tank *tank) const
-    {
-        return world_.checkTankCollision(rect, tank);
-    }
+    /// 这个矩形所在位置有没有挡坦克的物块（见 `World::blocksTankAt`）。
+    bool blocksTankAt(const QRect &rect) const { return world_.blocksTankAt(rect); }
 
     const QVector<Wall> &getWalls() const { return world_.getWalls(); }
 
