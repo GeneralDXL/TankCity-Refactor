@@ -64,6 +64,12 @@ public:
 
     bool checkCollision(const QRect &rect) const { return world_.checkCollision(rect); }
 
+    /// 出生点用：离 preferred 最近的可通行格中心（见 `World::nearestWalkableCenter`）。
+    QPoint nearestWalkableCenter(const QPoint &preferred) const
+    {
+        return world_.nearestWalkableCenter(preferred);
+    }
+
     /// 这个矩形所在位置有没有挡坦克的物块（见 `World::blocksTankAt`）。
     bool blocksTankAt(const QRect &rect) const { return world_.blocksTankAt(rect); }
 

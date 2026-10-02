@@ -131,6 +131,47 @@ void expectWellFormedPath(const World &world,
 } // namespace
 
 /**
+ * 出生点必须放得下整辆车 —— 钉住 level_13「出生在海里、开局动不了」那个 bug。
+ *
+ * 背景：出生点此前是 `addPlayer` 里写死的 `80,400`，与关卡内容无关；`level_13` 的海
+ * 正好覆盖那一格（x=80 → 第 1 列，y=400 → 第 8 行），玩家一出生就被困住。
+ *
+ * 两侧口径刻意不同：`nearestWalkableCenter` 只保证"这一格按**网格**算可通行"，
+ * 这里再用**连续空间**的 `blocksTankAt` 把整辆车放上去复核一遍。两者都过才算真能出生 ——
+ * 只用其中一个，都可能漏掉 D1 那种"格与车不一致"的边角。
+ */
+TEST(PathFinder, SpawnPointFitsTheTankOnEveryLevel) {
+    const QVector<tankcity::config::LevelEntry> levels = ConfigLoader::listLevels(kLevelsDir);
+    ASSERT_GE(levels.size(), 10);
+
+    for (int index = 0; index < levels.size(); ++index) {
+        SCOPED_TRACE(testing::Message() << "关卡序号 " << index);
+
+        const World world = loadWorld(index);
+
+        // 用玩家出生点的"期望值"发问（与 game.cpp 的 addPlayer 同一个入参）
+        const QPoint spawn = world.nearestWalkableCenter(QPoint(80, 400));
+
+        const QPoint cell = world.worldToGrid(spawn);
+        EXPECT_TRUE(world.isCellWalkable(cell.x(), cell.y()))
+            << "出生点所在的格不可通行（level_13 的海就是这么卡住玩家的）";
+
+        const QRect probe(spawn.x() - 20, spawn.y() - 20, 40, 40);
+        EXPECT_FALSE(world.blocksTankAt(probe))
+            << "出生点放不下整辆车，玩家一开局就会被卡住";
+
+        // 现场取证：level_13 里原先那个写死的出生点（80,400）**确实**是不可通行的 ——
+        // 这条断言保证上面那两条不是"碰巧通过"：真正的病灶就在这里。
+        // 若哪天有人把海改走、使这里变得可通行，一条会失败，提醒他确认修复是否仍被覆盖。
+        if (levels.at(index).id == QStringLiteral("level_13")) {
+            EXPECT_TRUE(world.blocksTankAt(QRect(80 - 20, 400 - 20, 40, 40)))
+                << "level_13 的 80,400 本应是海（这个 bug 的现场）——"
+                   "地图被改过？请确认出生点修复仍被这条用例覆盖";
+        }
+    }
+}
+
+/**
  * 全部 10 张关卡：各自连通分量内最远的两格之间都能求出**格式正确**的路径。
  *
  * 覆盖面最大的守卫 —— 同时检查了跨整张图的寻路、关卡装载，以及

@@ -247,7 +247,11 @@ void Game::addPlayer(int clientId)
 {
     if (players.contains(clientId)) return;
     
-    int playerX=80, playerY=400;
+    // 出生点：从固定的"期望位置"出发，由引擎挪到最近一个**放得下整辆车**的格子中心。
+    // 以前这里是写死的 80,400，与关卡内容毫无关系 —— level_13 的海正好压着这一格
+    // （x=80 → 第 1 列，y=400 → 第 8 行，而海整行都在那里），玩家一开局就卡在海里。
+    // 判据与"这一格能不能走"完全一致，见 World::nearestWalkableCenter。
+    const QPoint spawn = gameMap->nearestWalkableCenter(QPoint(80, 400));
 
     tankcity::config::TankStats stats;
     if (!resolvePlayerStats(stats)) {
@@ -257,7 +261,7 @@ void Game::addPlayer(int clientId)
 
     // 创建玩家坦克
     auto player = std::make_shared<Player>(gameMap, stats);
-    player->init(playerX, playerY);
+    player->init(spawn.x(), spawn.y());
     players.insert(clientId, player);
     oneOfId = clientId;
     
@@ -267,11 +271,14 @@ void Game::addPlayer(int clientId)
     }
     
     // 通知所有玩家有新玩家加入
-    qDebug() << "new new new " << playerX << ' ' << playerY << '\n';
+    // 用**实际**位置上报：出生点可能被引擎挪到别的格子，报文必须跟着走 ——
+    // 原先这里发的是那两个写死的局部变量，出生点一旦调整客户端就会被告知错误坐标。
+    const QPoint actual = player->getPosition();
+    qDebug() << "new new new " << actual.x() << ' ' << actual.y() << '\n';
     QJsonObject json;
     json["type"] = "player_init";
     json["id"] = clientId;
-    json["position"] = QJsonObject{{"x", playerX}, {"y", playerY}};
+    json["position"] = QJsonObject{{"x", actual.x()}, {"y", actual.y()}};
     json["bodyAngle"] = player->getBodyAngle();
     json["turretAngle"] = player->getTurretAngle();
     json["health"] = player->getHealth();

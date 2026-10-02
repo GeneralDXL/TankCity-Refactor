@@ -52,6 +52,29 @@ bool World::loadLevel(const tankcity::config::LevelData &level,
     return true;
 }
 
+QPoint World::nearestWalkableCenter(const QPoint &preferred) const
+{
+    QPoint best = preferred;
+    int bestDistance = -1;   // -1 = 还没找到任何一个可通行格
+
+    for (int gy = 0; gy < getGridHeight(); ++gy) {
+        for (int gx = 0; gx < getGridWidth(); ++gx) {
+            if (!isCellWalkable(gx, gy))
+                continue;
+
+            const QPoint candidate = gridToWorld(QPoint(gx, gy));
+            const int distance = qMax(qAbs(candidate.x() - preferred.x()),
+                                      qAbs(candidate.y() - preferred.y()));
+            if (bestDistance < 0 || distance < bestDistance) {
+                bestDistance = distance;
+                best = candidate;
+            }
+        }
+    }
+
+    return best;
+}
+
 engine::physics::CollisionWorld::Flags World::flagsOf(const Wall &wall)
 {
     engine::physics::CollisionWorld::Flags flags = 0;

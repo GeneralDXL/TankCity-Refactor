@@ -72,6 +72,20 @@ public:
 
     QPoint worldToGrid(const QPoint &worldPos) const;
     bool isCellWalkable(int gridX, int gridY) const;
+
+    /**
+     * 从 @p preferred 出发，取一个**坦克放得下**的格子中心（世界坐标）。
+     *
+     * 判据就是 `isCellWalkable`：D1 的口径是「格内内缩后仍容得下坦克才算可通行」，
+     * 所以「可通行格的中心」恰好等价于「整辆车放得下的位置」。
+     * 距离按切比雪夫（棋盘距离）取最近，平手按行优先 —— 保证确定性。
+     * 整张图没有可通行格时原样返回 @p preferred（不猜、不抛异常）。
+     *
+     * 用途是**出生点**：在此之前出生点是写死的坐标、与关卡内容无关 ——
+     * 只要那张地图在那个位置放了挡车的物块（`level_13` 的海正好压在 80,400 那一格），
+     * 玩家一开局就卡在里面动弹不得。
+     */
+    QPoint nearestWalkableCenter(const QPoint &preferred) const;
     bool isLineWalkable(const QPoint &start, const QPoint &end) const;
     QPoint gridToWorld(const QPoint &gridPos) const;
 
