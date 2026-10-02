@@ -212,12 +212,14 @@ void Enemy::advanceTowards(const QPoint &targetWorld, Map *map)
     if (position == before)
         return;   // 查询与实走不一致（地形倍率会让实走更远/更近），这一帧就不动
 
-    // 车体朝向 = **实际位移**方向。
-    // 旧实现在避障分支里算的是 `bestPos - position`，而 position 在那之前
-    // 已被赋值成 bestPos，于是恒为 atan2(0, 0) = 0 —— 一避障车头就朝右跳。
-    const QPoint moved = position - before;
-    bodyAngle = static_cast<float>(
-        qRadiansToDegrees(qAtan2(static_cast<double>(moved.y()), static_cast<double>(moved.x()))));
+    // 车体朝向 = **转向决策的方向**，而不是"这一帧实际走了哪一格"。
+    //
+    // 实际位移是整数像素（斜向每轴只有 0/1 两种取值），拿它算角度会让车体角在相邻两帧
+    // 之间跳变几十度 —— 位置轨迹是对的，但看起来就是"未贴墙时高频左右摆动"（实测反馈）。
+    // 这里取决策方向，既连续稳定，也仍然修住了旧代码那个 bug
+    //（旧代码在避障分支里对 `bestPos - position` 求 atan2，而 position 已被赋值 → 恒 0°，
+    //  一避障车头就朝右跳）。角度按车体的 0-360 约定归一化。
+    bodyAngle = static_cast<float>(std::fmod(desiredAngle + bestOffset + 360.0, 360.0));
 
     // 记住这次是往哪一侧偏的（直行成功时保留原有记忆）
     if (bestOffset > 0.0)

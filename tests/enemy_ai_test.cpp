@@ -224,6 +224,60 @@ TEST(EnemyAi, ReachesAPlayerHuggingAWall) {
 }
 
 /**
+ * 未贴墙运动时车体朝向**不得高频左右翻转**（实测反馈的"高频左右震动"）。
+ *
+ * 判据刻意不是"相邻帧角度差要小"——那会误伤正当的方向变更：换路径点、每 60 帧重寻路
+ * 时方向本来就该跳。真正属于"摆动"的特征是**翻转**：这一帧往一侧偏、下一帧往另一侧偏，
+ * 来回交替。所以这里统计"最近两次可观转角反号"的次数。
+ *
+ * 前 10 帧不算：开局那一次"转向对准目标"本来就该是一个大跳变。
+ */
+TEST(EnemyAi, HullAngleDoesNotAlternateWhileCrossingOpenGround) {
+    MazeFixture fixture;
+    setupMaze(fixture, 0);   // 开阔关
+
+    const World &world = fixture.map.world();
+    const QPoint enemyStart = world.gridToWorld(firstWalkable(world));
+
+    tankcity::config::TankStats stats =
+        tankcity::config::resolveEnemyStats(shipped(), shipped().difficulties.at(0));
+    const tankcity::config::AiDef ai;
+    Enemy enemy(&fixture.map, enemyStart, 0, stats, ai);
+
+    auto wrapTo180 = [](double deg) {
+        while (deg > 180.0) deg -= 360.0;
+        while (deg < -180.0) deg += 360.0;
+        return deg;
+    };
+
+    float previous = enemy.getBodyAngle();
+    double lastSignificant = 0.0;
+    int reversals = 0;
+    for (int frame = 0; frame < 300; ++frame) {
+        enemy.update(fixture.playerPos, &fixture.map);
+
+        const double delta = wrapTo180(static_cast<double>(enemy.getBodyAngle()) - previous);
+        if (frame >= 10 && std::fabs(delta) > 10.0 && std::fabs(lastSignificant) > 10.0
+            && (delta > 0.0) != (lastSignificant > 0.0)) {
+            ++reversals;
+        }
+        if (std::fabs(delta) > 10.0)
+            lastSignificant = delta;
+        previous = enemy.getBodyAngle();
+    }
+
+    // 实测：车体角取自"整数位移"时 300 帧里反号 **117** 次（就是玩家看到的高频摆动）；
+    // 改成取自"转向决策方向"后降到 **17** 次。这里取 30 作为上限 ——
+    // 它既能挡住退回旧行为的回归，也如实承认还有残留（见测试末尾的说明）。
+    EXPECT_LT(reversals, 30)
+        << "方向在 " << reversals << " 处相邻帧内反号 —— 这就是高频左右摆动";
+
+    // 残留（17 次）尚未解决：怀疑是接近目标时各候选方向打分差距太小（转弯代价只有
+    // 0.05px/度，而不同偏转带来的距离差在近距离时也小于 1px），于是来回抢。
+    // 要确认得先把"反号发生在哪些帧/什么距离上"打出来，属下一步。
+}
+
+/**
  * 朝玩家走的过程里，**净位移应当接近总路程**。
  *
  * 这是"抽搐"的量化判据：来回横跳会让总路程远大于净位移。
