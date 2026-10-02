@@ -795,11 +795,19 @@ QByteArray minimalLevel(const QString &id, const QString &name = QString())
 
 } // namespace
 
+/// 仓库里现有多少张关卡。列表用例一律以它为基数 —— 这样**以后加图不必改测试**，
+/// 这正是 M3 DoD 第 6 条（新图靠 JSON 即可玩）的要求：加一张图只该动数据。
+int shippedLevelCount()
+{
+    return ConfigLoader::listLevels(kLevelsDir).size();
+}
+
 TEST(LevelList, ShippedLevelsAreListedInOrder)
 {
     const QVector<LevelEntry> levels = ConfigLoader::listLevels(kLevelsDir);
 
-    ASSERT_EQ(levels.size(), 10) << "assets/levels 下应有 10 张关卡（index.json 不算关卡）";
+    // 只要求"不低于最初的 10 张"：张数会随试玩图与正式关卡增加，写死等于每加一张就改测试
+    ASSERT_GE(levels.size(), 10) << "assets/levels 下至少应有 10 张关卡（index.json 不算关卡）";
     for (int i = 0; i < levels.size(); ++i) {
         EXPECT_EQ(levels.at(i).index, i) << "第 " << i << " 项的序号必须与其位置一致";
         EXPECT_EQ(levels.at(i).id, QStringLiteral("level_%1").arg(i + 1, 2, 10, QLatin1Char('0')));
@@ -811,39 +819,46 @@ TEST(LevelList, ShippedLevelsAreListedInOrder)
 TEST(LevelList, NewLevelFileAppearsWithoutCppChange)
 {
     TempLevelsDir tmp;
-    tmp.writeFile(QStringLiteral("level_11.json"),
-                  minimalLevel(QStringLiteral("level_11"), QStringLiteral("新增测试关")));
+    // 编号必须**紧接在现有之后**：序号就是文件名里的数字减一（服务端按「序号+1」拼
+    // level_NN.json），所以不能跳号 —— 用 level_99 的话它的 index 会是 98，
+    // 而 loadLevelByIndex(14) 依旧去找 level_15.json。也不能复用 level_11：
+    // 那会覆盖复制过来的真文件，测不出「多了一项」。
+    const int base = shippedLevelCount();
+    const QString newId = QStringLiteral("level_%1").arg(base + 1, 2, 10, QLatin1Char('0'));
+    tmp.writeFile(newId + QStringLiteral(".json"),
+                  minimalLevel(newId, QStringLiteral("新增测试关")));
 
     const QVector<LevelEntry> levels = ConfigLoader::listLevels(tmp.dir());
 
-    ASSERT_EQ(levels.size(), 11) << "多放一个 level_11.json，列表就该多一项";
-    EXPECT_EQ(levels.last().index, 10) << "序号 10 对应 level_11.json";
-    EXPECT_EQ(levels.last().id, QStringLiteral("level_11"));
+    ASSERT_EQ(levels.size(), base + 1) << "多放一个关卡文件，列表就该多一项";
+    EXPECT_EQ(levels.last().index, base) << "序号排在现有全部之后";
+    EXPECT_EQ(levels.last().id, newId);
     EXPECT_EQ(levels.last().name, QStringLiteral("新增测试关"));
 
-    // 序号是 UI ↔ 服务端的契约：服务端拿 10 去拼 level_11.json 必须拼得到。
-    const LevelData loaded = ConfigLoader::loadLevelByIndex(tmp.dir(), 10, shipped());
-    EXPECT_EQ(loaded.id, QStringLiteral("level_11"));
+    // 序号是 UI ↔ 服务端的契约：服务端拿这个序号去拼文件名必须拼得到。
+    const LevelData loaded = ConfigLoader::loadLevelByIndex(tmp.dir(), base, shipped());
+    EXPECT_EQ(loaded.id, newId);
 }
 
 TEST(LevelList, NameFallsBackToIdWhenMissing)
 {
     TempLevelsDir tmp;
-    tmp.writeFile(QStringLiteral("level_11.json"), minimalLevel(QStringLiteral("level_11")));
+    tmp.writeFile(QStringLiteral("level_99.json"), minimalLevel(QStringLiteral("level_99")));
 
     const QVector<LevelEntry> levels = ConfigLoader::listLevels(tmp.dir());
 
-    ASSERT_EQ(levels.size(), 11);
-    EXPECT_EQ(levels.last().name, QStringLiteral("level_11")) << "没写 name 时退回 id";
+    ASSERT_EQ(levels.size(), shippedLevelCount() + 1);
+    EXPECT_EQ(levels.last().name, QStringLiteral("level_99")) << "没写 name 时退回 id";
 }
 
 TEST(LevelList, BrokenFileIsSkippedInsteadOfFailing)
 {
     TempLevelsDir tmp;
-    tmp.writeFile(QStringLiteral("level_11.json"), QByteArray("{ 这不是 JSON"));
+    // 同样避开仓库里已有的名字，否则会把复制过来的好文件也写坏
+    tmp.writeFile(QStringLiteral("level_99.json"), QByteArray("{ 这不是 JSON"));
 
     // 列表是菜单的入口：一张关卡写坏不该把整个菜单拖死（可玩性由开局时的加载兜底）。
-    EXPECT_EQ(ConfigLoader::listLevels(tmp.dir()).size(), 10);
+    EXPECT_EQ(ConfigLoader::listLevels(tmp.dir()).size(), shippedLevelCount());
 }
 
 TEST(LevelList, OnlyLevelFilesAreListed)
@@ -852,7 +867,7 @@ TEST(LevelList, OnlyLevelFilesAreListed)
     tmp.writeFile(QStringLiteral("level_10_backup.json"), QByteArray("{}"));
     tmp.writeFile(QStringLiteral("readme.txt"), QByteArray("hi"));
 
-    EXPECT_EQ(ConfigLoader::listLevels(tmp.dir()).size(), 10)
+    EXPECT_EQ(ConfigLoader::listLevels(tmp.dir()).size(), shippedLevelCount())
         << "只认 level_NN.json：备份与说明文件不该出现在菜单里";
     EXPECT_TRUE(ConfigLoader::listLevels(QStringLiteral("no/such/levels/dir")).isEmpty())
         << "目录不存在时返回空列表，不抛异常";
