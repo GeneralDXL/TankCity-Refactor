@@ -2,7 +2,7 @@
 
 > 把一个 2025 年的学生课设坦克游戏，系统性 **重构 / 翻新 / 维护** 为「架构清晰、配置驱动、手感在线」的工程作品。
 
-**状态**：🔄 重构进行中（已完成 **M0**、**M1**、**M2**，下一步 **M3 世界与玩法重构**）
+**状态**：🔄 重构进行中（已完成 **M-1**、**M0**、**M1**、**M2**、**M3**；下一步 **M4 玩法创新落地**，方案评审中）
 
 ---
 
@@ -42,8 +42,13 @@
   - [x] **M1.0** 目录与构建结构（`client` / `server` / `tests` 提升到顶层）
   - [x] **M1.1** 逐个抽取 engine 子模块
 - [x] **M2** 配置驱动（关卡 / 实体 / 物块 JSON 化）
-- [ ] **M3** 世界与玩法重构（tile 世界、双摇杆、A*）
-- [ ] **M4** 玩法创新落地（地形即资源 / 反弹 / 物块词条）
+- [x] **M3** 世界与玩法重构（tile 世界、双摇杆、A* 上网格）
+  - [x] 网格整数化（40 → **50px**：1200/50 = 24、900/50 = 18，不再有 22.5 那种半格）
+  - [x] `World` / `Map` 分层：几何与规则分离（`World` 只管地形与碰撞查询）
+  - [x] **双摇杆**落地：`key_input` → `move{x,y}` + `aim{x,y}`，归一化在服务端
+  - [x] A* 迁入 `game/world`，AI 参数接入 `difficulty.json`
+  - [x] 关卡按 **block id** 描述；新增 4 张纯 JSON tile 图（共 **14 关**）
+- [ ] **M4** 玩法创新落地（地形即资源 / 反弹 / 物块词条）—— 方案评审中
 - [ ] **M5** 网络统一（单机 = 本地联机）
 - [ ] **M6** 音画表现（音频、贴图、资产优化）
 - [ ] **M7** 打击感 / Juice
@@ -56,22 +61,26 @@
 - **C++17**
 - **Qt 6**（Widgets / Network）—— 渲染后端设计为**可插拔**：QPainter 先行，OpenGL 预留
 - **CMake** 构建
-- **GoogleTest**（计划）
-- **GitHub Actions**（计划）
+- **GoogleTest**（已接入：130 用例 / 25 套件）
+- **GitHub Actions**（已接入：Ubuntu + Windows 双平台构建与测试）
 
 ## 目录结构
 
 ```
 .
+├── engine/     # 引擎层（core / physics / render / input / asset）
+├── game/       # 玩法层（world / entity）
+├── shared/     # 两侧共用的数据模型（config）
 ├── client/     # Qt 表现层
 ├── server/     # 权威游戏逻辑
 ├── tests/      # 单元测试（GoogleTest + CTest）
+├── assets/     # 配置 / 关卡 / 贴图（数据，随源码走）
 ├── tools/      # 开发工具（服务端监控）
 ├── docs/       # 文档
 └── .github/    # CI（GitHub Actions）
 ```
 
-> `engine/`（引擎层）、`game/`（玩法层）、`shared/`（共享协议与配置模型）将在 **M1.1** 抽取时建立。
+> 依赖单向：`client` / `server` → `game` → `engine`。
 
 ## 构建与运行
 
@@ -80,7 +89,7 @@
 ```bash
 cmake -S . -B build -DCMAKE_PREFIX_PATH="<你的 Qt 安装前缀>"
 cmake --build build
-ctest --test-dir build --output-on-failure   # 运行单元测试
+ctest --test-dir build --output-on-failure   # 运行单元测试（当前 130 用例 / 25 套件）
 ```
 
 - 构建产物：`build/bin/tankcity_client.exe`、`build/bin/tankcity_server.exe`
@@ -104,12 +113,12 @@ ctest --test-dir build --output-on-failure   # 运行单元测试
 - 服务端是**控制台程序**，`qInfo()` / `qCritical()` 直接打在终端上：配置写错时会报出
   「文件 + 字段路径 + 原因」，例如 `entities.json: bullets.bulletBasic —— 穿甲与弹射互斥：…`。
 - 数值与关卡都是数据文件（`assets/config/*.json`、`assets/levels/level_NN.json`）：
-  新增一张关卡只需把 `level_11.json` 放进 `assets/levels/`，**不必改代码**。
+  新增一张关卡只需把 `level_15.json` 放进 `assets/levels/`，**不必改代码**（M3 已用 4 张 tile 图验证过这条）。
 
 ## 操作方式
 
-- **原始版本**：`W/S` 前进 / 后退，`A/D` 原地旋转
-- **目标版本**：`WASD` 平滑八向移动 + 鼠标独立瞄准 + 左键开火（双摇杆）
+- **当前版本（M3 起）**：`WASD` **八向平移**（车身随即指向移动方向）+ 鼠标独立瞄准 + 左键**单击**开火（双摇杆）
+- **原始版本（2025）**：`W/S` 前进 / 后退，`A/D` 原地旋转
 
 ---
 
