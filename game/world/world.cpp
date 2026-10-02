@@ -9,38 +9,10 @@
 //   - 扣血、销毁、广播这些**判定**留在 Map（规则层），本文件只回答几何问题。
 // 每个查询的筛选条件都刻意与旧实现逐条对应（含顺序），容易看错的几处都写了注释。
 
-namespace {
-
-/// 物块 id -> Wall::type 的桥接表。
-///
-/// M2 只把「关卡几何」外置成数据，Wall 仍然用 wall.h 的 int type 表达碰撞、贴图，
-/// 以及 map_init 协议里的 wallType，所以这里显式做一次映射。新增物块种类时，
-/// 除了 assets/config/blocks.json，还要在这里登记一次；等 M3 让渲染与碰撞直接按
-/// block id 走，这层桥接即可删除。
-struct BlockTypeEntry
-{
-    const char *id;
-    int type;
-};
-
-const BlockTypeEntry kBlockTypes[] = {
-    {"brick", BRICK},
-    {"steel", STEEL},
-    {"forest", FOREST},
-    {"sea", SEA},
-    {"ice", ICE},
-};
-
-int wallTypeOfBlock(const QString &blockId)
-{
-    for (const BlockTypeEntry &entry : kBlockTypes) {
-        if (blockId == QLatin1String(entry.id))
-            return entry.type;
-    }
-    return -1;
-}
-
-} // namespace
+// M3 步 5：这里原先有一张「物块 id -> Wall::type」的桥接表（brick -> 1、steel -> 2 …），
+// 是 M2 时代为「Wall 仍用 int type 表达碰撞与贴图、协议里也发类型号」而存在的。
+// 现在物块身份从 blocks.json 一路上传（Wall::getBlockId → map_init 的 block 字段 →
+// 客户端贴图表），类型号已无必要，桥接表随之删除 —— 新增物块只需写 blocks.json。
 
 World::World() = default;
 
@@ -64,15 +36,8 @@ bool World::loadLevel(const tankcity::config::LevelData &level,
         walls.append(Wall::makeBoundary(r.x(), r.y(), r.width(), r.height()));
 
     for (const tankcity::config::LevelRect &lr : level.allRects()) {
-        // 先问引擎能不能表达（贴图与 map_init 协议用的都是 int type），再取配置里的行为。
-        // 顺序不可颠倒：level_test 的合成关卡正是靠这一条拒绝「引擎无法表达」的物块 id。
-        const int type = wallTypeOfBlock(lr.block);
-        if (type < 0) {
-            qCritical() << "关卡" << level.id << "使用了 Wall 无法表达的物块 id：" << lr.block;
-            walls.clear();
-            rebuildCollisionWorld();
-            return false;
-        }
+        // 物块是否合法只由 blocks.json 说了算（M3 步 5 之前还要先问一句"Wall 能不能表达
+        // 这个类型号"，那张桥接表已经删了）。拒绝时清空 World，不留半张地图。
         const tankcity::config::BlockDef *def = config.block(lr.block);
         if (def == nullptr) {
             qCritical() << "关卡" << level.id << "引用了 blocks.json 中不存在的物块：" << lr.block;
@@ -80,7 +45,7 @@ bool World::loadLevel(const tankcity::config::LevelData &level,
             rebuildCollisionWorld();
             return false;
         }
-        walls.append(Wall(lr.rect.x(), lr.rect.y(), lr.rect.width(), lr.rect.height(), type, *def));
+        walls.append(Wall(lr.rect.x(), lr.rect.y(), lr.rect.width(), lr.rect.height(), *def));
     }
 
     rebuildCollisionWorld();

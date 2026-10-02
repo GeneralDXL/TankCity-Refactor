@@ -215,14 +215,15 @@ TEST(ClientNetMessageParser, WallFieldsComeFromPositionAndSizePairs)
     const QJsonObject json{
         {"position", QJsonObject{{"x", 10}, {"y", 20}}},
         {"size", QJsonObject{{"width", 30}, {"height", 40}}},
-        {"type", 1},
+        {"block", "brick"},
         {"id", 42},
     };
 
     const client::net::WallState state = client::net::parseWall(json);
 
     EXPECT_EQ(state.rect, QRect(10, 20, 30, 40));
-    EXPECT_EQ(state.type, 1);
+    // M3 步 5：墙的物块身份按 id 走（原先是断言 `state.type == 1` 的类型号）
+    EXPECT_EQ(state.block, QStringLiteral("brick"));
     EXPECT_EQ(state.id, 42);
 }
 

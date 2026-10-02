@@ -836,7 +836,6 @@ void Game::sendInitialState(int clientId)
         wallObj["position"] = QJsonObject{{"x", w.x()}, {"y", w.y()}};
         wallObj["size"] = QJsonObject{{"width", w.width()}, {"height", w.height()}};
         wallObj["id"] = wall.getId();
-        wallObj["type"] = wall.getType();       // M3 步 5 起弃用（客户端改用下面的 block）
         wallObj["block"] = wall.getBlockId();   // 物块 id：客户端按它查贴图表
         wallArray.append(wallObj);
     }

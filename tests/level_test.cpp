@@ -104,30 +104,14 @@ QString rectText(const QRect &r)
     return QStringLiteral("[%1, %2, %3, %4]").arg(r.x()).arg(r.y()).arg(r.width()).arg(r.height());
 }
 
-/**
- * 物块 id -> wall.h 的 int type。
- *
- * 这层对应关系原本由一次性导出工具的 `blockIdOf()` 建立（BRICK -> "brick" ...）。
- * 这里独立重写一遍，而不是去调 `map.cpp` 里的桥接表 —— 两边若有一处写错，测试会当场发现。
- */
-int legacyTypeOfBlock(const QString &id)
+/// 比对用的键：物块 id + 矩形。
+///
+/// M3 步 5 之前这里是 `%1@%2` 配一张 id -> int 的映射表（`legacyTypeOfBlock`）——
+/// 那时 Wall 用类型号表达身份，映射表本身也成了必须与别处对齐的重复信息。
+/// 现在快照与关卡文件里用的都是物块 id，那层映射连同它的重复风险一起消失了。
+QString wallKey(const QString &block, const QRect &r)
 {
-    if (id == QLatin1String("brick"))
-        return BRICK;
-    if (id == QLatin1String("steel"))
-        return STEEL;
-    if (id == QLatin1String("forest"))
-        return FOREST;
-    if (id == QLatin1String("sea"))
-        return SEA;
-    if (id == QLatin1String("ice"))
-        return ICE;
-    return -1;  // 旧关卡里只会出现上述五种
-}
-
-QString wallKey(int type, const QRect &r)
-{
-    return QStringLiteral("%1@%2").arg(type).arg(rectText(r));
+    return QStringLiteral("%1@%2").arg(block).arg(rectText(r));
 }
 
 /**
@@ -549,11 +533,11 @@ TEST(MapLoad, JsonDrivenMapReproducesLegacyWallSet)
         int boundaryCount = 0;
         QVector<QString> actualBlocks;
         for (const Wall &w : map.getWalls()) {
-            if (w.getType() == BOUNDARY) {
+            if (w.getBlockId() == QLatin1String("boundary")) {
                 ++boundaryCount;
                 continue;
             }
-            actualBlocks.append(wallKey(w.getType(), w.getRect()));
+            actualBlocks.append(wallKey(w.getBlockId(), w.getRect()));
         }
         actualBlocks.sort();
 
@@ -561,7 +545,7 @@ TEST(MapLoad, JsonDrivenMapReproducesLegacyWallSet)
         // 两者的分组方式不同（这一点由 LevelLoad 用例证明几何与类型完全一致）。
         QVector<QString> expectedBlocks;
         for (const auto &b : legacyBlocks(legacy.at(index)))
-            expectedBlocks.append(wallKey(legacyTypeOfBlock(b.first), b.second));
+            expectedBlocks.append(wallKey(b.first, b.second));
         expectedBlocks.sort();
 
         EXPECT_EQ(actualBlocks, expectedBlocks);
@@ -576,35 +560,37 @@ TEST(MapLoad, JsonDrivenMapReproducesLegacyWallSet)
 
 namespace {
 
-/// 坦克能穿过的地形：`blocksTank=false` 的物块不进碰撞世界，所以拦住坦克的查询
+/// 坦克能穿过的物块：`blocksTank=false` 的不进碰撞世界，所以拦住坦克的查询
 /// 永远看不到它们（见 World::rebuildCollisionWorld）。
-bool tankSees(int type)
+bool tankSees(const QString &block)
 {
-    return type != FOREST && type != ICE;
+    return block != QLatin1String("forest") && block != QLatin1String("ice");
 }
 
-/// `Map::checkBulletCollision` 会跳过的地形（子弹能穿过）。
-bool bulletSees(int type)
+/// 子弹能穿过的物块（`Map::checkBulletCollision` 会跳过它们）。
+bool bulletSees(const QString &block)
 {
-    return type != FOREST && type != SEA && type != ICE;
+    return !(block == QLatin1String("forest") || block == QLatin1String("sea")
+             || block == QLatin1String("ice"));
 }
 
-struct TypedRect
+/// 物块 id + 矩形。边界用固定 id "boundary"。
+struct BlockRect
 {
-    int type;
+    QString block;
     QRect rect;
 };
 
 /// 旧快照的墙体，**保留数组顺序**——它就是旧 `Map::loadMap()` 的 append 顺序。
-QVector<TypedRect> legacyWallsOf(const QJsonObject &level)
+/// 快照里的 `type` 字段本来就是物块 id 字符串（M2 导出时写入的），直接取用即可。
+QVector<BlockRect> legacyWallsOf(const QJsonObject &level)
 {
-    QVector<TypedRect> result;
+    QVector<BlockRect> result;
     for (const QJsonValue &v : level.value(QStringLiteral("walls")).toArray()) {
         const QJsonObject w = v.toObject();
-        const QString type = w.value(QStringLiteral("type")).toString();
         const QJsonArray r = w.value(QStringLiteral("rect")).toArray();
-        result.append(TypedRect{
-            type == QLatin1String("boundary") ? BOUNDARY : legacyTypeOfBlock(type),
+        result.append(BlockRect{
+            w.value(QStringLiteral("type")).toString(),
             QRect(r.at(0).toInt(), r.at(1).toInt(), r.at(2).toInt(), r.at(3).toInt())});
     }
     return result;
@@ -638,27 +624,27 @@ TEST(MapOrder, ReorderingIsInvisibleToFirstHitLogic)
 
         const LevelData level = ConfigLoader::loadLevelByIndex(kLevelsDir, index, shipped());
 
-        const QVector<TypedRect> oldWalls = legacyWallsOf(legacy.at(index));
-        QVector<TypedRect> newWalls;
+        const QVector<BlockRect> oldWalls = legacyWallsOf(legacy.at(index));
+        QVector<BlockRect> newWalls;
         for (const QRect &r : level.boundaryRects())
-            newWalls.append(TypedRect{BOUNDARY, r});
+            newWalls.append(BlockRect{QLatin1String("boundary"), r});
         for (const LevelRect &lr : level.allRects())
-            newWalls.append(TypedRect{legacyTypeOfBlock(lr.block), lr.rect});
+            newWalls.append(BlockRect{lr.block, lr.rect});
 
         ASSERT_EQ(oldWalls.size(), newWalls.size());
 
         // 1) 边界在两种顺序里都排在所有物块之前（旧代码先 append 四条边界，新代码同理）。
         //    边界的矩形拆分方式变了（像素相同），所以只比"位置",不比矩形。
-        const auto firstBlockIndex = [](const QVector<TypedRect> &v) {
+        const auto firstBlockIndex = [](const QVector<BlockRect> &v) {
             for (int i = 0; i < v.size(); ++i)
-                if (v.at(i).type != BOUNDARY)
+                if (v.at(i).block != QLatin1String("boundary"))
                     return i;
             return static_cast<int>(v.size());
         };
-        const auto lastBoundaryIndex = [](const QVector<TypedRect> &v) {
+        const auto lastBoundaryIndex = [](const QVector<BlockRect> &v) {
             int last = -1;
             for (int i = 0; i < v.size(); ++i)
-                if (v.at(i).type == BOUNDARY)
+                if (v.at(i).block == QLatin1String("boundary"))
                     last = i;
             return last;
         };
@@ -669,12 +655,12 @@ TEST(MapOrder, ReorderingIsInvisibleToFirstHitLogic)
         QVector<int> newIndexOf(oldWalls.size(), -1);
         QVector<bool> matched(newWalls.size(), false);
         for (int i = 0; i < oldWalls.size(); ++i) {
-            if (oldWalls.at(i).type == BOUNDARY)
+            if (oldWalls.at(i).block == QLatin1String("boundary"))
                 continue;
             for (int j = 0; j < newWalls.size(); ++j) {
-                if (matched.at(j) || newWalls.at(j).type == BOUNDARY)
+                if (matched.at(j) || newWalls.at(j).block == QLatin1String("boundary"))
                     continue;
-                if (newWalls.at(j).type == oldWalls.at(i).type
+                if (newWalls.at(j).block == oldWalls.at(i).block
                     && newWalls.at(j).rect == oldWalls.at(i).rect) {
                     matched[j] = true;
                     newIndexOf[i] = j;
@@ -688,17 +674,17 @@ TEST(MapOrder, ReorderingIsInvisibleToFirstHitLogic)
         for (int pass = 0; pass < 2; ++pass) {
             const bool forBullet = (pass == 1);
             for (int i = 0; i < oldWalls.size(); ++i) {
-                const TypedRect &a = oldWalls.at(i);
+                const BlockRect &a = oldWalls.at(i);
                 if (newIndexOf.at(i) < 0)  // 边界：拆分方式不同，不参与配对
                     continue;
-                if (!(forBullet ? bulletSees(a.type) : tankSees(a.type)))
+                if (!(forBullet ? bulletSees(a.block) : tankSees(a.block)))
                     continue;
 
                 for (int j = i + 1; j < oldWalls.size(); ++j) {
-                    const TypedRect &b = oldWalls.at(j);
+                    const BlockRect &b = oldWalls.at(j);
                     if (newIndexOf.at(j) < 0)
                         continue;
-                    if (!(forBullet ? bulletSees(b.type) : tankSees(b.type)))
+                    if (!(forBullet ? bulletSees(b.block) : tankSees(b.block)))
                         continue;
                     if (!a.rect.intersects(b.rect))
                         continue;
