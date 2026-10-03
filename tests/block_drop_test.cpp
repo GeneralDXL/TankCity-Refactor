@@ -41,7 +41,7 @@ bool loadMap(Map &map, int index)
 /// 找一个"干净"的物块（首个命中确实是它自己）—— 与另两个测试同法：直接问世界。
 QRect findBlock(Map &map, const QString &blockId, int *wallIdOut)
 {
-    constexpr int kShippedLevels = 14;
+    constexpr int kShippedLevels = 15;
     for (int index = 0; index < kShippedLevels; ++index) {
         if (!loadMap(map, index))
             continue;

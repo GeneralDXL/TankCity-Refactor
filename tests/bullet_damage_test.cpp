@@ -52,7 +52,7 @@ bool loadMap(Map &map, int index)
 /// 任何一张里有干净的候选即可。
 QRect findBlock(Map &map, const QString &blockId, int *wallIdOut)
 {
-    constexpr int kShippedLevels = 14;   // M3 收尾时的关卡数（含 4 张 tile 试玩图）
+    constexpr int kShippedLevels = 15;   // M3 收尾时的关卡数（含 4 张 tile 试玩图）
 
     for (int index = 0; index < kShippedLevels; ++index) {
         if (!loadMap(map, index))

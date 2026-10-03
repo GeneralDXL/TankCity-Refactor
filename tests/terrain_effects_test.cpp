@@ -53,7 +53,7 @@ bool loadMap(Map &map, int index)
 /// 在已发布的 14 张关卡里找第一个 @p blockId 物块，把那一关装进 @p map 并返回它的矩形。
 QRect findBlock(Map &map, const QString &blockId)
 {
-    constexpr int kShippedLevels = 14;
+    constexpr int kShippedLevels = 15;
     for (int index = 0; index < kShippedLevels; ++index) {
         if (!loadMap(map, index))
             continue;
