@@ -462,6 +462,7 @@ QHash<QString, BlockDef> parseBlocks(const QString &file, const QVector<LayerDef
                            QStringLiteral("blocksTank"), QStringLiteral("blocksBullet"),
                            QStringLiteral("blocksSight"), QStringLiteral("moveSpeedFactor"),
                            QStringLiteral("movement"),
+                           QStringLiteral("drops"),
                            QStringLiteral("damageVisual")},
                           file, path);
 
@@ -478,6 +479,26 @@ QHash<QString, BlockDef> parseBlocks(const QString &file, const QVector<LayerDef
         def.destructible = optionalBool(o, QStringLiteral("destructible"), false, file, path);
         def.maxHealth = optionalInt(o, QStringLiteral("maxHealth"), 0, file, path);
         def.requiredBulletTags = optionalStringArray(o, QStringLiteral("requiredBulletTags"), file, path);
+
+        // 掉落表（M4 步 5）：[ { "item": "healthPack", "weight": 3 }, … ]
+        // 只做**结构与类型**校验（item 是否真存在，留给后面统一做引用完整性检查）。
+        if (o.contains(QStringLiteral("drops"))) {
+            const QJsonValue dropsValue = o.value(QStringLiteral("drops"));
+            const QString dropsPath = childPath(path, QStringLiteral("drops"));
+            if (!dropsValue.isArray())
+                fail(file, dropsPath, QStringLiteral("应为数组"));
+            for (const QJsonValue &dv : dropsValue.toArray()) {
+                if (!dv.isObject())
+                    fail(file, dropsPath, QStringLiteral("数组元素应为对象"));
+                const QJsonObject d = dv.toObject();
+                DropDef drop;
+                drop.item = requireString(d, QStringLiteral("item"), file, dropsPath);
+                drop.weight = optionalInt(d, QStringLiteral("weight"), 1, file, dropsPath);
+                if (drop.weight <= 0)
+                    fail(file, dropsPath, QStringLiteral("weight 必须为正（它是相对权重）"));
+                def.drops.append(drop);
+            }
+        }
 
         // 未显式声明时继承所属图层
         def.blocksTank = optionalBool(o, QStringLiteral("blocksTank"), layer.blocksTank, file, path);
@@ -1167,6 +1188,27 @@ void validateCrossReferences(Config &config,
                                          QStringLiteral("requiredBulletTags")),
                                tag),
                      QStringLiteral("标签 \"%1\" 没有任何子弹提供，该物块将永远无法被破坏").arg(tag));
+        }
+    }
+
+    // 4.5) 掉落表引用的道具必须存在（M4 步 5）
+    //      写错 id 的后果是"打了半天、什么也不掉"，而且不会有任何报错 —— 典型静默失效。
+    for (auto it = config.blocks.constBegin(); it != config.blocks.constEnd(); ++it) {
+        for (const DropDef &drop : it->drops) {
+            // items 是 QVector<ItemDef>（道具数量是个位数），按 id 线性找即可
+            bool exists = false;
+            for (const ItemDef &item : config.items) {
+                if (item.id == drop.item) {
+                    exists = true;
+                    break;
+                }
+            }
+            if (!exists)
+                fail(blocksFile,
+                     childPath(childPath(childPath(QStringLiteral("blocks"), it.key()),
+                                         QStringLiteral("drops")),
+                               QStringLiteral("item")),
+                     QStringLiteral("未定义的道具 \"%1\"（见 items.json 的 items）").arg(drop.item));
         }
     }
 

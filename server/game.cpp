@@ -9,6 +9,7 @@
 #include <QDateTime>
 #include <QTimer>   // 道具时效与结算延时用的是 QTimer::singleShot（走真实时间，与帧无关）
 #include "asset/AssetPaths.h"
+#include "config/DropTable.h"   // pickDrop：按权重抽掉落项（M4 步 5）
 #include "server.h"
 
 namespace {
@@ -949,6 +950,50 @@ void Game::safeStop() {
 }
 void Game::onWallDelete(const QJsonObject &json)
 {
+    // 先原样转发给客户端（它按 wallId 删墙；M4 起报文里多了 block/x/y，它不看）
+    emit broadcastData(QJsonDocument(json).toJson(), id);
+
+    // M4 步 5「① 地形即资源」：物块被打掉时按掉落表掉一件道具。
+    // 抽签规则是纯函数（shared/config/DropTable.h，可单测），这里只管"随机数 + 掉在哪"。
+    dropItemForBlock(json.value(QStringLiteral("block")).toString(),
+                     json.value(QStringLiteral("x")).toInt(),
+                     json.value(QStringLiteral("y")).toInt());
+}
+
+void Game::dropItemForBlock(const QString &blockId, int x, int y)
+{
+    const tankcity::config::BlockDef *def = m_config.block(blockId);
+    if (def == nullptr || def->drops.isEmpty())
+        return;   // 这个物块不掉东西（钢材/边界/森林/海…）
+
+    const tankcity::config::DropDef *drop =
+        tankcity::config::pickDrop(def->drops, QRandomGenerator::global()->generateDouble());
+    if (drop == nullptr)
+        return;
+
+    // ⚠️ 这是一张**临时桥**：把 items.json 的 id 映射到运行期的 ItemType。
+    // M4.5 把道具改成「效果数组」之后，Item 会直接携带 id 与效果，这张表随之删除。
+    // 它的存在由 tests/block_drop_test.cpp 守着 —— 表里漏了哪个 id，用例立刻红。
+    static const QHash<QString, ItemType> kByItemId{
+        {QStringLiteral("healthPack"), ItemType::HealthPack},
+        {QStringLiteral("ammoBoost"), ItemType::AmmoBoost},
+        {QStringLiteral("speedBoost"), ItemType::SpeedBoost},
+    };
+    const auto typeIt = kByItemId.constFind(drop->item);
+    if (typeIt == kByItemId.constEnd()) {
+        qWarning() << "掉落表引用了运行期不认识的道具 id：" << drop->item;
+        return;
+    }
+
+    Item item{nextItemId++, typeIt.value(), x, y, 10000};
+    items.append(item);
+
+    QJsonObject json;
+    json["type"] = "item_spawned";
+    json["id"] = item.id;
+    json["x"] = x;
+    json["y"] = y;
+    json["item_type"] = static_cast<int>(item.type);
     emit broadcastData(QJsonDocument(json).toJson(), id);
 }
 

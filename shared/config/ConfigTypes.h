@@ -74,6 +74,17 @@ struct DamageVisualDef {
     double tintDarken = 0.0;           ///< 血量归零前整体压暗的最大比例
 };
 
+/**
+ * 物块掉落表里的一项（M4 步 5）。
+ *
+ * `item` 必须是 `items.json` 里已定义的道具 id —— **加载期校验**（写错就报文件+字段路径，
+ * 而不是在战场上静默地"什么也没掉"）。`weight` 是相对权重，抽取时按它分配概率。
+ */
+struct DropDef {
+    QString item;
+    int weight = 1;
+};
+
 struct BlockDef {
     QString id;
     QString layer;
@@ -93,6 +104,10 @@ struct BlockDef {
     // M4 步 3 把它**退役**：那条语义被 `blocksSight` 完全覆盖 ——
     // 森林挡视线 ⇒ 敌怪看不见 ⇒ 隐身，不需要第二个开关（见台账 §4C-C9）。
     // 留两个语义重叠的开关，正是"改一个忘一个"这类坑的温床。
+
+    /// 掉落表（M4 步 5，"① 地形即资源"的落点）：被摧毁时按权重随机掉一件道具。
+    /// 空 = 此物块不掉东西（钢材、边界、森林等）。
+    QVector<DropDef> drops;
 
     MovementDef movement;
     DamageVisualDef damageVisual;

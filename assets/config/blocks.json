@@ -6,6 +6,11 @@
       "destructible": true,
       "maxHealth": 4,
       "requiredBulletTags": [],
+      "drops": [
+        { "item": "healthPack", "weight": 3 },
+        { "item": "ammoBoost", "weight": 2 },
+        { "item": "speedBoost", "weight": 2 }
+      ],
       "blocksTank": true,
       "blocksBullet": true,
       "blocksSight": true,

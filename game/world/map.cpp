@@ -61,6 +61,13 @@ BulletHit Map::checkBulletCollision(const QRect &rect,
         QJsonObject json;
         json["type"] = "delete_wall";
         json["wallId"] = deadWallId;
+        // M4 步 5：把"这是什么物块、倒在哪里"一并发出去 —— 服务端据此决定掉什么、掉在哪儿。
+        // 客户端仍按 wallId 删墙，多出来的字段它不看（**只增字段**，属安全扩展）。
+        // 注意要在 removeWallById 之前读：那之后 wall 指针就失效了。
+        json["block"] = wall->getBlockId();
+        const QRect deadRect = wall->getRect();
+        json["x"] = deadRect.center().x();
+        json["y"] = deadRect.center().y();
         emit broadcastMessage(json);
 
         world_.removeWallById(deadWallId);

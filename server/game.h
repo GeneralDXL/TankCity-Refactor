@@ -77,6 +77,14 @@ private slots:
     void gameLoop();
     void onWallDelete(const QJsonObject &json); // 处理墙删除事件
 
+    /**
+     * 物块被打掉时的**掉落**（M4 步 5，"① 地形即资源"）。
+     *
+     * 抽签在 `tankcity::config::pickDrop`（纯函数，可单测）；本函数只负责
+     * 取配置、抽一次随机数、把道具生成在物块倒下的位置并广播。
+     */
+    void dropItemForBlock(const QString &blockId, int x, int y);
+
 private:
     /**
      * 装载第 index 张关卡（0 起，对应 assets/levels/level_NN.json）。
