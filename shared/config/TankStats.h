@@ -23,6 +23,21 @@
 
 namespace tankcity::config {
 
+/**
+ * 一发子弹的运行时"身份"（M4 步 2）。
+ *
+ * 打包成结构体是为了让**命中判定只需要一个参数**：`Map::checkBulletCollision(rect, profile)`。
+ * 子弹自己持有一份（来自 entities.json 的子弹原型），于是"这是哪一发"跟着子弹走 ——
+ * M4.5 的**弹药队列**（同一个弹夹混着普通/穿甲/弹性弹）正是靠这一点才能实现，
+ * 那时开火方只需换一个 profile，判定方一行都不用改。
+ */
+struct BulletProfile {
+    int damage = 1;             ///< 命中伤害
+    QStringList tags;           ///< 标签（如 armorPiercing）—— 物块可用 requiredBulletTags 挑弹种
+    QStringList bounceOn;       ///< 可弹的物块 id（来自 `ricochet.bounceOn`；空 = 不弹）
+    int maxBounces = 0;         ///< 最多弹几次（0 = 不弹）
+};
+
 /** 坦克的运行时数值：速度已展开为像素 / 帧。 */
 struct TankStats {
     int health = 0;
@@ -40,6 +55,11 @@ struct TankStats {
     QString bulletId;
     QStringList bulletTags;
 
+    /// 弹射（M4 步 2，来自子弹原型的 `ricochet`）：可弹的物块 id 与最大弹数。
+    /// 空列表 / 0 表示这发子弹不弹 —— 与 tags 一样，**纯配置差别**，代码里没有弹种特判。
+    QStringList bulletBounceOn;
+    int bulletMaxBounces = 0;
+
     /// 移动探测盒（像素），默认 40×40。来自 entities.json 每辆坦克的 `collisionBox`。
     /// M3 决议 D4：手感相关的数值一律只存在于 JSON 里，改数值不需要重编译 ——
     /// 在此之前 `Tank::move()` 把 40 写死在代码里，配置里的 collisionBox 是死数据。
@@ -50,6 +70,17 @@ struct TankStats {
     int hitsToDestroy() const
     {
         return bulletDamage > 0 ? (health + bulletDamage - 1) / bulletDamage : 0;
+    }
+
+    /// 把默认弹种的属性打包给子弹（M4 步 2）。开火方一行调用，子弹自己带着走。
+    BulletProfile bulletProfile() const
+    {
+        BulletProfile profile;
+        profile.damage = bulletDamage;
+        profile.tags = bulletTags;
+        profile.bounceOn = bulletBounceOn;
+        profile.maxBounces = bulletMaxBounces;
+        return profile;
     }
 };
 

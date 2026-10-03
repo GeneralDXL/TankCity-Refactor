@@ -9,6 +9,15 @@
       "speed": 1.0,
       "damage": 2,
       "tags": ["armorPiercing"]
+    },
+    "bulletRicochet": {
+      "speed": 1.0,
+      "damage": 1,
+      "ricochet": {
+        "enabled": true,
+        "maxBounces": 3,
+        "bounceOn": ["steel", "boundary"]
+      }
     }
   },
   "tanks": {

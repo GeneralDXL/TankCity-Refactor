@@ -243,9 +243,9 @@ Bullet* Enemy::shoot()
 
         // 创建新子弹（使用地图指针而非this；速度与伤害来自 entities.json）
         return new Bullet(bulletPos, static_cast<int>(turretAngle), BulletType::Enemy,
-                          bulletSpeed, bulletDamage, bulletTags,
-                          [mapPtr](const QRect& rect, int damage, const QStringList &tags) {
-                              return mapPtr->checkBulletCollision(rect, damage, tags);
+                          bulletSpeed, bulletProfile_,
+                          [mapPtr](const QRect& rect, const tankcity::config::BulletProfile &profile) {
+                              return mapPtr->checkBulletCollision(rect, profile);
                           });
     }
 

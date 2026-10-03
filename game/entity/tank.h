@@ -31,6 +31,9 @@ public:
     void setSpeed(float newSpeed) { speed = newSpeed; } // 速度设置
     int getBulletDamage() const { return bulletDamage; } // 子弹伤害（配置）
 
+    /// 默认弹种的完整属性（M4 步 2）。开火方用它构造子弹。
+    const tankcity::config::BulletProfile &bulletProfile() const { return bulletProfile_; }
+
     /// 移动探测盒尺寸（像素）：来自 entities.json 的 collisionBox，不再是写死的 40。
     int getCollisionBoxWidth() const { return collisionBoxW; }
     int getCollisionBoxHeight() const { return collisionBoxH; }
@@ -71,7 +74,9 @@ protected:
     float speed = 0.0f;
     double bulletSpeed = 0.0;  // 子弹速度（像素/帧）
     int bulletDamage = 1;      // 子弹伤害
-    QStringList bulletTags;    // 默认弹种的标签（M4 步 1；钢材要 armorPiercing）
+    // 默认弹种的完整属性（M4 步 2）：伤害 / 标签 / 可弹清单 / 最大弹数。
+    // 开火时整份交给子弹 —— 命中判定因此只需要一个参数，M4.5 的弹药队列也只需换一份。
+    tankcity::config::BulletProfile bulletProfile_;
     int muzzleOffset = 0;      // 炮口相对车体中心的距离（像素）
     // 一律给默认值：漏进初始化列表就是未初始化的栈垃圾 ——
     // M3 步 3b 重写本文件时漏掉 `shootDelay(stats.shootDelayTicks)`，

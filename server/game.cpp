@@ -589,10 +589,13 @@ void Game::checkCollisions()
             continue;
         }
         
-        // 检查墙壁碰撞（伤害与标签都取自子弹原型，与子弹自身 move() 里的判定同源 ——
-        // 同一个判定在两处被调用，必须给同样的三项，否则"能不能打掉钢材"会出现两种答案）
-        if (gameMap->checkBulletCollision(bullet->getRect(), bullet->getInjury(),
-                                          bullet->getTags())) {
+        // 检查墙壁碰撞：与 Bullet::move() 是**同一判据**，因此必须给同一份参数 ——
+        // 同一发子弹在两处不能得到两种答案（M4 的反弹一旦加入，"可弹"在两处结论不同
+        // 就会表现为"有时弹、有时原地消失"）。参数只有 profile 一个，防的就是这件事。
+        // 注：move() 命中后已把子弹标记为待清除，所以这里通常不会再命中；
+        // 它兜住的是"出生点就在物块里"这类边角情况。
+        const BulletHit hit = gameMap->checkBulletCollision(bullet->getRect(), bullet->profile());
+        if (hit.hit && !(hit.bouncable && bullet->bouncesLeft() > 0)) {
             it = bullets.erase(it);
             continue;
         }

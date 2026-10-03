@@ -18,7 +18,7 @@ constexpr int kMaxSubSteps = 64;
 
 Tank::Tank(Map *gameMap, const tankcity::config::TankStats &stats)
     : health(stats.health), speed(stats.moveSpeed), bulletSpeed(stats.bulletSpeed),
-      bulletDamage(stats.bulletDamage), bulletTags(stats.bulletTags),
+      bulletDamage(stats.bulletDamage), bulletProfile_(stats.bulletProfile()),
       muzzleOffset(stats.muzzleOffset),
       shootDelay(stats.shootDelayTicks),
       collisionBoxW(stats.collisionBoxW), collisionBoxH(stats.collisionBoxH),

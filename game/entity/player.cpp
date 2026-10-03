@@ -53,11 +53,12 @@ Bullet* Player::shoot()
     QPoint bulletPos = position + QPoint(offsetX, offsetY);
 
     // 创建新子弹（速度与伤害来自 entities.json 的子弹原型）
-    // 子弹带上自己的标签（M4 步 1）：命中钢材这类"挑弹种"的物块时要靠它判定
-    return new Bullet(bulletPos, turretAngle, BulletType::Player, bulletSpeed, bulletDamage,
-                      bulletTags,
-                      [this](const QRect& rect, int damage, const QStringList &tags) {
-                          return this->gameMap->checkBulletCollision(rect, damage, tags);
+    // 子弹带走自己的完整属性（M4 步 2：伤害 / 标签 / 可弹清单 / 弹数）。
+    // 命中判定因此只需一个参数；M4.5 的弹药队列换一份 profile 即可，判定方一行不改。
+    return new Bullet(bulletPos, turretAngle, BulletType::Player, bulletSpeed,
+                      bulletProfile_,
+                      [this](const QRect& rect, const tankcity::config::BulletProfile &profile) {
+                          return this->gameMap->checkBulletCollision(rect, profile);
                       });
 }
 

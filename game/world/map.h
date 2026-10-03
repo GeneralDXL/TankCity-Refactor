@@ -7,6 +7,7 @@
 #include <QRect>
 #include <QVector>
 
+#include "bullet.h"   // BulletHit（命中判定的结果，M4 步 2）
 #include "wall.h"
 #include "world.h"
 
@@ -85,15 +86,19 @@ public:
 
     // --- 规则：只有这一条不属于几何 ---
 
-    /// 子弹碰撞：返回 true 表示子弹命中并应当消失。
+    /// 子弹碰撞：**只回答发生了什么**，是否消失由子弹自己决定（M4 步 2）。
     ///
-    /// **注意：打不动也算命中** —— 普通弹打钢材不扣血，但子弹照样消失（手感上就是"打在钢板上"）。
+    /// 返回 `BulletHit`：有没有撞到、是不是可弹物块、撞在哪一面、物块矩形。
+    /// 之所以不再是 `bool`：反弹需要"判定方给证据、子弹做决策" ——
+    /// `Map` 知道撞到了什么，子弹知道自己还剩几次弹数。
     ///
-    /// @param damage 子弹自带的伤害，打在可破坏物块上时由这里扣除
-    ///               （伤害值只由配置定义，因此随参数传入而不是写死在这里）。
-    /// @param bulletTags 子弹提供的标签（M4 步 1）。物块要求 `requiredBulletTags` 时，
-    ///               子弹必须带其中一个标签才扣得动 —— 钢材要 `armorPiercing`。
-    bool checkBulletCollision(const QRect &rect, int damage, const QStringList &bulletTags);
+    /// 规则要点：
+    /// - **打不动也算命中** ✓（普通弹打钢材不扣血，但子弹照样消失 —— 手感上就是"打在钢板上"）；
+    /// - 物块要求 `requiredBulletTags` 时，子弹必须带其中一个标签才扣得动（钢材要 `armorPiercing`）；
+    /// - 物块在 `profile.bounceOn` 里时**不吃伤害**，只报告"可弹"（手稿：弹射仅限钢材与边界，
+    ///   击中砖块等走"破坏"这条路）。
+    BulletHit checkBulletCollision(const QRect &rect,
+                                   const tankcity::config::BulletProfile &profile);
 
 signals:
     void broadcastMessage(const QJsonObject &data); // 广播消息

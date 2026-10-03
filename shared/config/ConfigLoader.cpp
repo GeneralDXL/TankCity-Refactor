@@ -1133,10 +1133,17 @@ void validateCrossReferences(Config &config,
                      .arg(it->ammo.defaultBullet, joinIds(config.bullets.keys())));
     }
 
-    // 3) 弹射目标必须是已定义的物块
+    // 3) 弹射目标必须是已定义的物块 —— **外加保留 id "boundary"（M4 步 2）**
+    //
+    // 边界不是物块（`想-I10`：最外周是关卡属性），所以它不在 blocks.json 里；
+    // 但它的墙体 id 就是 "boundary"（`Wall::makeBoundary`），而"子弹撞边界要弹"
+    // 是手稿里写明的规则（弹射仅限钢材与边界）。
+    // 所以这里给它一条**显式豁免**：既保住"边界不是物块"的决议，
+    // 又让 bounceOn 能引用它 —— 比往 blocks.json 里塞一个假物块干净得多。
+    const QString kBoundaryId = QStringLiteral("boundary");
     for (auto it = config.bullets.constBegin(); it != config.bullets.constEnd(); ++it) {
         for (const QString &target : it->ricochet.bounceOn) {
-            if (!config.blocks.contains(target))
+            if (target != kBoundaryId && !config.blocks.contains(target))
                 fail(entitiesFile,
                      childPath(childPath(childPath(QStringLiteral("bullets"), it.key()),
                                          QStringLiteral("ricochet")),

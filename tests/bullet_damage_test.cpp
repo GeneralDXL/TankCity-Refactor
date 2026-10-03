@@ -87,6 +87,23 @@ bool wallStillExists(const Map &map, int wallId)
     return false;
 }
 
+/// 普通弹：伤害 1、无标签、不弹。
+tankcity::config::BulletProfile plainBullet()
+{
+    tankcity::config::BulletProfile profile;
+    profile.damage = 1;
+    return profile;
+}
+
+/// 穿甲弹：伤害 2、带 `armorPiercing`（`entities.json` 的 `bulletAP`，M4 步 1）。
+tankcity::config::BulletProfile armourPiercingBullet()
+{
+    tankcity::config::BulletProfile profile;
+    profile.damage = 2;
+    profile.tags = QStringList{QStringLiteral("armorPiercing")};
+    return profile;
+}
+
 } // namespace
 
 /**
@@ -102,9 +119,9 @@ TEST(BulletDamage, SteelIgnoresBulletsWithoutTheRequiredTag) {
     const QRect probe = findBlock(map, QStringLiteral("steel"), &steelId);
     ASSERT_FALSE(probe.isNull()) << "没有找到含钢材的关卡，这条用例失去意义";
 
-    // 普通弹：无标签、伤害 1
+    // 普通弹：伤害 1、无标签
     for (int i = 0; i < 20; ++i) {
-        EXPECT_TRUE(map.checkBulletCollision(probe, 1, QStringList()))
+        EXPECT_TRUE(map.checkBulletCollision(probe, plainBullet()).hit)
             << "打不动也要算命中 —— 子弹照样消失（手感上就是'打在钢板上'）";
     }
 
@@ -122,14 +139,14 @@ TEST(BulletDamage, ArmourPiercingBreaksSteelInFourHits) {
     const QRect probe = findBlock(map, QStringLiteral("steel"), &steelId);
     ASSERT_FALSE(probe.isNull());
 
-    const QStringList ap{QStringLiteral("armorPiercing")};
+    const tankcity::config::BulletProfile ap = armourPiercingBullet();
 
     for (int hit = 1; hit <= 3; ++hit) {
-        EXPECT_TRUE(map.checkBulletCollision(probe, 2, ap));
+        EXPECT_TRUE(map.checkBulletCollision(probe, ap).hit);
         EXPECT_TRUE(wallStillExists(map, steelId)) << "第 " << hit << " 下就把钢材打掉了（早于 4 下）";
     }
 
-    EXPECT_TRUE(map.checkBulletCollision(probe, 2, ap));
+    EXPECT_TRUE(map.checkBulletCollision(probe, ap).hit);
     EXPECT_FALSE(wallStillExists(map, steelId)) << "第 4 下没打掉钢材（数值律失效）";
 }
 
@@ -141,10 +158,10 @@ TEST(BulletDamage, BrickStillBreaksInFourHitsWithPlainBullets) {
     ASSERT_FALSE(probe.isNull());
 
     for (int hit = 1; hit <= 3; ++hit) {
-        EXPECT_TRUE(map.checkBulletCollision(probe, 1, QStringList()));
+        EXPECT_TRUE(map.checkBulletCollision(probe, plainBullet()).hit);
         EXPECT_TRUE(wallStillExists(map, brickId)) << "第 " << hit << " 下就破了砖块";
     }
-    EXPECT_TRUE(map.checkBulletCollision(probe, 1, QStringList()));
+    EXPECT_TRUE(map.checkBulletCollision(probe, plainBullet()).hit);
     EXPECT_FALSE(wallStillExists(map, brickId)) << "第 4 下没打掉砖块";
 }
 
