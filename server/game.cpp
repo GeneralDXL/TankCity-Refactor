@@ -589,8 +589,10 @@ void Game::checkCollisions()
             continue;
         }
         
-        // 检查墙壁碰撞（伤害取自子弹原型，与子弹自身 move() 里的判定同源）
-        if (gameMap->checkBulletCollision(bullet->getRect(), bullet->getInjury())) {
+        // 检查墙壁碰撞（伤害与标签都取自子弹原型，与子弹自身 move() 里的判定同源 ——
+        // 同一个判定在两处被调用，必须给同样的三项，否则"能不能打掉钢材"会出现两种答案）
+        if (gameMap->checkBulletCollision(bullet->getRect(), bullet->getInjury(),
+                                          bullet->getTags())) {
             it = bullets.erase(it);
             continue;
         }

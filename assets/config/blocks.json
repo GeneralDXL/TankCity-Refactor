@@ -19,7 +19,9 @@
 
     "steel": {
       "layer": "blocks",
-      "destructible": false,
+      "destructible": true,
+      "maxHealth": 8,
+      "requiredBulletTags": ["armorPiercing"],
       "blocksTank": true,
       "blocksBullet": true,
       "blocksSight": true,

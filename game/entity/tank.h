@@ -71,6 +71,7 @@ protected:
     float speed = 0.0f;
     double bulletSpeed = 0.0;  // 子弹速度（像素/帧）
     int bulletDamage = 1;      // 子弹伤害
+    QStringList bulletTags;    // 默认弹种的标签（M4 步 1；钢材要 armorPiercing）
     int muzzleOffset = 0;      // 炮口相对车体中心的距离（像素）
     // 一律给默认值：漏进初始化列表就是未初始化的栈垃圾 ——
     // M3 步 3b 重写本文件时漏掉 `shootDelay(stats.shootDelayTicks)`，

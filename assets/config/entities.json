@@ -4,6 +4,11 @@
     "bulletBasic": {
       "speed": 1.0,
       "damage": 1
+    },
+    "bulletAP": {
+      "speed": 1.0,
+      "damage": 2,
+      "tags": ["armorPiercing"]
     }
   },
   "tanks": {

@@ -43,6 +43,8 @@ TankStats resolveTankStats(const Config &config, const TankDef &tank)
     stats.shootDelayTicks = tank.shootDelayTicks;
     stats.bulletSpeed = bullet->speed * config.game.tuning.baseBulletSpeed;
     stats.bulletDamage = bullet->damage;
+    stats.bulletId = tank.bullet;
+    stats.bulletTags = bullet->tags;
     stats.muzzleOffset = tank.muzzleOffset;
     stats.collisionBoxW = tank.collisionBoxW;
     stats.collisionBoxH = tank.collisionBoxH;

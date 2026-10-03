@@ -86,9 +86,14 @@ public:
     // --- 规则：只有这一条不属于几何 ---
 
     /// 子弹碰撞：返回 true 表示子弹命中并应当消失。
+    ///
+    /// **注意：打不动也算命中** —— 普通弹打钢材不扣血，但子弹照样消失（手感上就是"打在钢板上"）。
+    ///
     /// @param damage 子弹自带的伤害，打在可破坏物块上时由这里扣除
     ///               （伤害值只由配置定义，因此随参数传入而不是写死在这里）。
-    bool checkBulletCollision(const QRect &rect, int damage);   //子弹碰撞检测
+    /// @param bulletTags 子弹提供的标签（M4 步 1）。物块要求 `requiredBulletTags` 时，
+    ///               子弹必须带其中一个标签才扣得动 —— 钢材要 `armorPiercing`。
+    bool checkBulletCollision(const QRect &rect, int damage, const QStringList &bulletTags);
 
 signals:
     void broadcastMessage(const QJsonObject &data); // 广播消息

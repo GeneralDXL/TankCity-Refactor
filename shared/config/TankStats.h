@@ -32,6 +32,14 @@ struct TankStats {
     int bulletDamage = 1;
     int muzzleOffset = 0;        ///< 炮口相对车体中心的距离（像素）
 
+    /// 默认弹种的 id 与它的标签（M4 步 1）。
+    ///
+    /// 标签决定「这发子弹打不打得动某物块」：钢材要求 `armorPiercing`，普通弹打上去不掉血。
+    /// 子弹在开火时把它们带上，命中判定因此不必回查配置 —— 也为 M4.5 的「弹药队列」
+    /// （同一个弹夹里混着不同弹种）留好了位置。
+    QString bulletId;
+    QStringList bulletTags;
+
     /// 移动探测盒（像素），默认 40×40。来自 entities.json 每辆坦克的 `collisionBox`。
     /// M3 决议 D4：手感相关的数值一律只存在于 JSON 里，改数值不需要重编译 ——
     /// 在此之前 `Tank::move()` 把 40 写死在代码里，配置里的 collisionBox 是死数据。

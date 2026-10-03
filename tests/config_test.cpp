@@ -190,8 +190,12 @@ TEST(ConfigLoad, BlocksMatchLegacyEquivalentValues)
 
     const auto *steel = cfg.block(QStringLiteral("steel"));
     ASSERT_NE(steel, nullptr);
-    // M2 等价值：旧代码里钢材耐久 200000，实际不可破坏
-    EXPECT_FALSE(steel->destructible);
+    // **M4 步 1 生效**：钢材改为「可破坏，但需穿甲弹」—— M2 α 表里写明的第二批目标值
+    //（M2 的等价值曾是 destructible=false；旧代码用 200000 耐久假装不可破）。
+    // 数值律：8 血 ÷ 穿甲 2 伤 = **4 下**，与砖块（4 ÷ 1）同级同速。
+    EXPECT_TRUE(steel->destructible);
+    EXPECT_EQ(steel->maxHealth, 8);
+    EXPECT_EQ(steel->requiredBulletTags, QStringList{QStringLiteral("armorPiercing")});
 
     const auto *sea = cfg.block(QStringLiteral("sea"));
     ASSERT_NE(sea, nullptr);
@@ -337,8 +341,10 @@ TEST(ConfigErrors, DestructibleWithoutHealthIsRejected)
 TEST(ConfigErrors, TagNoBulletProvidesIsRejected)
 {
     TempConfig tmp;
+    // 用一个**没有任何子弹提供**的标签。不能用 armorPiercing 了 —— M4 步 1 加了
+    // bulletAP（tags:["armorPiercing"]）之后，那个标签已经有人提供，本条校验不再触发。
     tmp.patch(QStringLiteral("blocks.json"), QStringLiteral("\"requiredBulletTags\": [],"),
-              QStringLiteral("\"requiredBulletTags\": [\"armorPiercing\"],"));
+              QStringLiteral("\"requiredBulletTags\": [\"tagNobodyProvides\"],"));
     expectConfigError([&tmp] { tmp.load(); }, QStringLiteral("requiredBulletTags"),
                       QStringLiteral("没有任何子弹提供"));
 }
@@ -524,9 +530,9 @@ TEST(ConfigResolve, BlockBehaviourMatchesLegacyCollisionRules)
 
     const auto *steel = cfg.block(QStringLiteral("steel"));
     ASSERT_NE(steel, nullptr);
-    // 旧：health = 200000（实为不可破）。这个数现在连 JSON 里都不需要存在，
-    // 不可破坏这件事由 destructible 表达。
-    EXPECT_FALSE(steel->destructible);
+    // M4 步 1 起钢材可破坏（需穿甲弹）；旧代码的 200000 耐久已由 maxHealth 表达。
+    EXPECT_TRUE(steel->destructible);
+    EXPECT_EQ(steel->maxHealth, 8);
     EXPECT_TRUE(steel->blocksTank);
     EXPECT_TRUE(steel->blocksBullet);
 

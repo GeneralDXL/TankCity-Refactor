@@ -16,7 +16,7 @@ bool Map::loadLevel(const tankcity::config::LevelData &level,
     return world_.loadLevel(level, config);
 }
 
-bool Map::checkBulletCollision(const QRect &rect, int damage)
+bool Map::checkBulletCollision(const QRect &rect, int damage, const QStringList &bulletTags)
 {
     // 几何：先问世界「第一个挡子弹的物块是谁」（顺序由 CollisionWorld 的插入顺序保证，
     // 与旧实现「首个命中即返回」一致）。
@@ -28,12 +28,14 @@ bool Map::checkBulletCollision(const QRect &rect, int damage)
     if (wall == nullptr)
         return false;
 
-    // 规则：只有可破坏物块吃伤害（边界与钢墙在 blocks.json 里 destructible=false）
-    if (wall->isDestructible()) {
+    // 规则：可破坏 **且** 这发子弹打得动它，才吃伤害（M4 步 1）。
+    // 钢材的 requiredBulletTags 是 ["armorPiercing"]，普通弹打上去只是"打在钢板上"：
+    // 不扣血，但子弹照样命中消失 —— 这正是手感上"打不动"的表达。
+    if (wall->isDestructible() && wall->acceptsBullet(bulletTags)) {
         wall->setHealth(wall->getHealth() - damage);
     }
 
-    if (wall->isDestructible() && wall->getHealth() <= 0) {
+    if (wall->isDestructible() && wall->acceptsBullet(bulletTags) && wall->getHealth() <= 0) {
         // 先取 id 再移除：removeWallById 之后 wall 指针已失效
         const int deadWallId = wall->getId();
 

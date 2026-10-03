@@ -4,8 +4,8 @@
 
 // bullet.cpp
 Bullet::Bullet(const QPoint &position, float angle, BulletType type, double speed, int damage,
-               CollisionCheckFunc collisionCallback)
-    : position(position), angle(angle), type(type), speed(speed),
+               const QStringList &tags, CollisionCheckFunc collisionCallback)
+    : position(position), angle(angle), type(type), speed(speed), tags(tags),
     collisionCheckCallback(collisionCallback), injury(damage)
 {
 }
@@ -30,7 +30,8 @@ void Bullet::move()
     // 碰撞检测回调函数
     if (collisionCheckCallback) {
         // 只检查当前位置，不再检查路径上的点
-        if (collisionCheckCallback(QRect(position.x() - 5, position.y() - 5, 10, 10), injury)) {
+        // tags 随回调传回：物块可以挑弹种（钢材要 armorPiercing）—— M4 步 1
+        if (collisionCheckCallback(QRect(position.x() - 5, position.y() - 5, 10, 10), injury, tags)) {
             // 遇到碰撞直接移出屏幕，以便被移除
             position = QPoint(-2000, -2000);
             return;
