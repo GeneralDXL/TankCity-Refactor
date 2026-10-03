@@ -35,14 +35,18 @@ bool Enemy::canShoot() const
     if (shootCooldown != 0 || shootTimer != 0)
         return false;
 
-    // 视线被墙挡住就不开火。否则敌人隔着墙照样射击，看起来就是"对着墙打"——
-    // 实测反馈里的现象之一。判据复用网格走线（一次 Bresenham），代价可忽略。
+    // 视线被挡就不开火。否则敌人隔着墙照样射击，看起来就是"对着墙打"——实测反馈里的现象之一。
+    //
+    // 判据是**视线**（`isLineOfSight`，走 blocksSight）而**不是**"坦克能否通过"：
+    // M4 步 3 之后森林挡视线 ⇒「玩家待在林子里 ⇒ 敌人看不见 ⇒ 不开火」**自然成立**，
+    // 不需要为森林写任何特例 ✓。海则相反（`blocksSight: false`，不挡视线）⇒
+    // 敌人会**隔着海朝你开火** —— 这正是"隔海看得见、但我得绕过去"的设计意图 ✓。
     if (lastKnownPlayerPos.isNull())
         return false;   // 还没 update() 过，不知道玩家在哪
 
     return gameMap != nullptr
-           && gameMap->isLineWalkable(gameMap->worldToGrid(position),
-                                      gameMap->worldToGrid(lastKnownPlayerPos));
+           && gameMap->isLineOfSight(gameMap->worldToGrid(position),
+                                     gameMap->worldToGrid(lastKnownPlayerPos));
 }
 
 

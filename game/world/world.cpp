@@ -82,6 +82,8 @@ engine::physics::CollisionWorld::Flags World::flagsOf(const Wall &wall)
         flags |= kBlocksMove;
     if (wall.isBlockingBullet())
         flags |= kBlocksShot;
+    if (wall.isBlockingSight())
+        flags |= kBlocksSight;
     return flags;
 }
 
@@ -197,6 +199,31 @@ bool World::isLineWalkable(const QPoint &start, const QPoint &end) const
     // 「一格能不能过」仍是地图的判断，所以以回调注入。
     return grid_.walkLine(start, end, [this](const QPoint &cell) {
         return isCellWalkable(cell.x(), cell.y());
+    });
+}
+
+bool World::isCellVisible(int gridX, int gridY) const
+{
+    // 与 isCellWalkable 同构，只是换一个标记：视线只看 blocksSight。
+    // 刻意**不做血量判据** —— 一堵正在被打的墙也仍然挡着视线。
+    bool visible = true;
+    const QRect cellRect = grid_.cellRect(QPoint(gridX, gridY), kCellPadding);
+
+    world_.forEachOverlap(engine::physics::Aabb::fromRect(cellRect), kBlocksSight,
+                          [&visible](const engine::physics::CollisionWorld::Body &) {
+        visible = false;
+        return false;
+    });
+    return visible;
+}
+
+bool World::isLineOfSight(const QPoint &start, const QPoint &end) const
+{
+    // 与 isLineWalkable 用同一条 Bresenham 走线，**只换判据**。
+    // 两者刻意分开：isLineWalkable 还被 PathFinder 用于拉直路径，
+    // 把它改成"子弹可通行"会让 A* 的路径平滑跟着变（M4 步 0 结论 5）。
+    return grid_.walkLine(start, end, [this](const QPoint &cell) {
+        return isCellVisible(cell.x(), cell.y());
     });
 }
 

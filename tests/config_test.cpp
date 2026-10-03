@@ -208,9 +208,12 @@ TEST(ConfigLoad, BlocksMatchLegacyEquivalentValues)
     ASSERT_NE(forest, nullptr);
     EXPECT_EQ(forest->layer, QStringLiteral("overlay"));
     // M2 等价值：玩家侧旧值为 ×0.5。敌人侧旧代码另有 ×0.75（enemy.cpp），
-    // 属同一地形两套数值的不一致，M2 起统一按此字段取值（有意修正）；M3 改为 0.7。
-    EXPECT_DOUBLE_EQ(forest->moveSpeedFactor, 0.5);
-    EXPECT_FALSE(forest->hidesTankFromEnemyAI);       // M3 启用
+    // 属同一地形两套数值的不一致，M2 起统一按此字段取值（有意修正）。
+    // **M4 步 3 生效**：目标值 0.7（M2 α 表的第二批）。
+    EXPECT_DOUBLE_EQ(forest->moveSpeedFactor, 0.7);
+    // 森林"隐身"的**唯一机制**是挡住视线 —— 不是那个已被退役的
+    // `hidesTankFromEnemyAI` 开关（它语义被 blocksSight 完全覆盖，见台账 §4C-C9）。
+    EXPECT_TRUE(forest->blocksSight);
 
     const auto *ice = cfg.block(QStringLiteral("ice"));
     ASSERT_NE(ice, nullptr);
@@ -428,17 +431,21 @@ TEST(ConfigErrors, DifficultyOverrideTypoIsRejected)
 
 TEST(ConfigInheritance, BlockFallsBackToLayerDefaults)
 {
-    // forest 属于 overlay 图层（blocksSight 默认 true）；去掉它的显式声明后应继承为 true。
+    // 用 **sea** 而不是 forest：M4 步 3 之后 forest 的显式值（可行走、不挡弹、挡视线）
+    // 与 overlay 层的默认值**完全相同**，拿它举例会退化成"无论继承与否都通过"的空断言。
+    // sea 属于 `blocks` 图层（三个开关默认都是 true），而它**显式关掉了挡子弹** ——
+    // 把那行删掉后，blocksBullet 应当回到图层的 true，这才真正测到"继承"。
     TempConfig tmp;
     tmp.patch(QStringLiteral("blocks.json"),
-              QStringLiteral("\"blocksSight\": false,\n      \"moveSpeedFactor\": 0.5,"),
-              QStringLiteral("\"moveSpeedFactor\": 0.5,"));
+              QStringLiteral("\"blocksBullet\": false,\n      \"blocksSight\": false"),
+              QStringLiteral("\"blocksSight\": false"));
 
     const Config cfg = tmp.load();
-    const auto *forest = cfg.block(QStringLiteral("forest"));
-    ASSERT_NE(forest, nullptr);
-    EXPECT_TRUE(forest->blocksSight);      // 继承自 overlay
-    EXPECT_FALSE(forest->blocksTank);      // 同样继承自 overlay
+    const auto *sea = cfg.block(QStringLiteral("sea"));
+    ASSERT_NE(sea, nullptr);
+    EXPECT_TRUE(sea->blocksBullet);    // 删掉显式声明后继承自 blocks 图层
+    EXPECT_TRUE(sea->blocksTank);      // 自己的显式声明
+    EXPECT_FALSE(sea->blocksSight);    // 自己的显式声明（M4 步 3：海不挡视线）
 }
 
 // ---------------------------------------------------------------------------
@@ -541,13 +548,18 @@ TEST(ConfigResolve, BlockBehaviourMatchesLegacyCollisionRules)
     // 旧：checkBulletCollision 跳过 SEA（子弹穿过），但挡坦克
     EXPECT_TRUE(sea->blocksTank);
     EXPECT_FALSE(sea->blocksBullet);
+    // **M4 步 3 起 blocksSight 被真正接线**：海不挡视线 —— 隔海看得见、但要绕行
+    EXPECT_FALSE(sea->blocksSight);
 
     const auto *forest = cfg.block(QStringLiteral("forest"));
     ASSERT_NE(forest, nullptr);
     // 旧：坦克可穿过，降速 ×0.5（敌人侧 0.75 的不一致已在 M2 统一）
     EXPECT_FALSE(forest->blocksTank);
     EXPECT_FALSE(forest->blocksBullet);
-    EXPECT_DOUBLE_EQ(forest->moveSpeedFactor, 0.5);
+    // **M4 步 3 生效**：森林**挡视线**（这就是"待在林子里隐身"的全部机制，零特例），
+    // 且降速目标是 0.7（M2 α 表写明的第二批；0.5 是 M2 的等价值）。
+    EXPECT_TRUE(forest->blocksSight);
+    EXPECT_DOUBLE_EQ(forest->moveSpeedFactor, 0.7);
 
     const auto *ice = cfg.block(QStringLiteral("ice"));
     ASSERT_NE(ice, nullptr);

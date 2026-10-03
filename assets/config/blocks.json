@@ -46,9 +46,8 @@
       "destructible": false,
       "blocksTank": false,
       "blocksBullet": false,
-      "blocksSight": false,
-      "moveSpeedFactor": 0.5,
-      "hidesTankFromEnemyAI": false
+      "blocksSight": true,
+      "moveSpeedFactor": 0.7
     },
 
     "ice": {

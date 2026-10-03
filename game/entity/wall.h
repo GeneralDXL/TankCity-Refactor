@@ -17,6 +17,10 @@ private:
     bool destructible = false;      // 能否被打掉
     bool blocksTank = true;         // 是否挡坦克
     bool blocksBullet = true;       // 是否挡子弹
+    // 是否挡视线（M4 步 3，来自 blocks.json 的 blocksSight）。
+    // 森林为 true ⇒ 敌怪的视线穿不过森林 ⇒「待在林子里就不被看见」自然成立，无需特例；
+    // 海为 false ⇒ 隔海看得见、但绕不过去（手稿里的设计意图）。
+    bool blocksSight = false;
     // 打掉它所需的子弹标签（M4 步 1）。空 = 任何子弹都能打（砖块）；非空 = 必须带其中一个标签
     // （钢材要 armorPiercing，普通弹打上去不掉血）。取自 blocks.json 的 requiredBulletTags。
     QStringList requiredBulletTags;
@@ -49,6 +53,7 @@ public:
     bool isDestructible() const { return destructible; } // 是否可破坏（配置）
     bool isBlockingTank() const { return blocksTank; }   // 是否挡坦克（配置）
     bool isBlockingBullet() const { return blocksBullet; } // 是否挡子弹（配置）
+    bool isBlockingSight() const { return blocksSight; }   // 是否挡视线（配置）
 
     /**
      * 这发子弹打不打得到它（M4 步 1）。

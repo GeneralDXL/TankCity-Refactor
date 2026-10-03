@@ -461,7 +461,7 @@ QHash<QString, BlockDef> parseBlocks(const QString &file, const QVector<LayerDef
                            QStringLiteral("maxHealth"), QStringLiteral("requiredBulletTags"),
                            QStringLiteral("blocksTank"), QStringLiteral("blocksBullet"),
                            QStringLiteral("blocksSight"), QStringLiteral("moveSpeedFactor"),
-                           QStringLiteral("hidesTankFromEnemyAI"), QStringLiteral("movement"),
+                           QStringLiteral("movement"),
                            QStringLiteral("damageVisual")},
                           file, path);
 
@@ -485,8 +485,7 @@ QHash<QString, BlockDef> parseBlocks(const QString &file, const QVector<LayerDef
         def.blocksSight = optionalBool(o, QStringLiteral("blocksSight"), layer.blocksSight, file, path);
 
         def.moveSpeedFactor = optionalDouble(o, QStringLiteral("moveSpeedFactor"), 0.0, file, path);
-        def.hidesTankFromEnemyAI =
-            optionalBool(o, QStringLiteral("hidesTankFromEnemyAI"), false, file, path);
+        // M4 步 3：`hidesTankFromEnemyAI` 已退役（语义被 blocksSight 覆盖）。
 
         def.movement = parseMovement(o, path, file);
         def.damageVisual = parseDamageVisual(o, path, file);

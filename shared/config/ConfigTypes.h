@@ -89,7 +89,10 @@ struct BlockDef {
     bool blocksSight = false;
 
     double moveSpeedFactor = 0.0;      ///< 0 表示不影响移动
-    bool hidesTankFromEnemyAI = false; ///< 森林：进入后不被敌怪检测
+    // 注：这里原有一个 `hidesTankFromEnemyAI`（"森林：进入后不被敌怪检测"）。
+    // M4 步 3 把它**退役**：那条语义被 `blocksSight` 完全覆盖 ——
+    // 森林挡视线 ⇒ 敌怪看不见 ⇒ 隐身，不需要第二个开关（见台账 §4C-C9）。
+    // 留两个语义重叠的开关，正是"改一个忘一个"这类坑的温床。
 
     MovementDef movement;
     DamageVisualDef damageVisual;

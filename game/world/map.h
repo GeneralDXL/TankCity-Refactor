@@ -58,6 +58,13 @@ public:
     {
         return world_.isLineWalkable(start, end);
     }
+
+    /// 视线（M4 步 3）：森林**挡**、海**不挡**。
+    /// 敌怪开火与索敌走它 —— 与 `isLineWalkable` 是两件事（后者还被 A\* 路径平滑用着）。
+    bool isLineOfSight(const QPoint &start, const QPoint &end) const
+    {
+        return world_.isLineOfSight(start, end);
+    }
     double getMoveSpeedFactor(const QPoint &position) const
     {
         return world_.getMoveSpeedFactor(position);
