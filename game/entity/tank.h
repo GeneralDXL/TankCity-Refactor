@@ -34,6 +34,10 @@ public:
     /// 默认弹种的完整属性（M4 步 2）。开火方用它构造子弹。
     const tankcity::config::BulletProfile &bulletProfile() const { return bulletProfile_; }
 
+    /// 当前速度向量（像素/帧，M4 步 4）。普通地形上恒为 0（不保留惯性状态）。
+    /// 暴露给测试观察"方向响应有多迟钝"——那是惯性手感的**唯一**可测判据。
+    QPointF velocity() const { return velocity_; }
+
     /// 移动探测盒尺寸（像素）：来自 entities.json 的 collisionBox，不再是写死的 40。
     int getCollisionBoxWidth() const { return collisionBoxW; }
     int getCollisionBoxHeight() const { return collisionBoxH; }

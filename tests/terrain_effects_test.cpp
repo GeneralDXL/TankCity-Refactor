@@ -25,6 +25,8 @@
 #include "map.h"
 #include "player.h"
 
+#include <cmath>
+
 #include <QPoint>
 #include <QRect>
 #include <QString>
@@ -225,8 +227,71 @@ TEST(TerrainEffects, IceKeepsSlidingAfterTheInputStops) {
     for (int i = 0; i < 3; ++i)
         player.update();
 
-    EXPECT_GT(player.getPosition().x(), afterPush.x() + 2)
-        << "冰上松手应当继续滑行；若这里没动，说明摩擦/惯性没有接线";
+    EXPECT_GT(player.getPosition().x(), afterPush.x())
+        << "冰上松手应当继续滑行；若这里没动，说明摩擦/惯性没有接线"
+           "（位移量刻意小：加速度很弱，见 IceDirectionalResponseIsDeliberatelySluggish）";
+}
+
+/**
+ * 冰面的**方向响应**必须迟钝 —— 这条钉的就是 2026-10-03 试玩反馈 #1。
+ *
+ * 反馈原话：*"我向前有一个速度、想往后撤，这个加速度会小很多，我仍然会向前滑行一段距离
+ * 才会向后开始加速；正交方向同理 —— 向前的速度按惯性衰减、向右则慢慢加速到设定移速，
+ * 而不是立刻得到很高的速度。"*
+ *
+ * 模型可测：`v ← v·friction + target·accel`（当 `accel = 1 − friction` 时与"朝目标按比例靠拢"等价）。
+ * 于是**一帧输入只把速度朝目标推进 accel**，而**旧方向的分量每帧只衰减 accel**。
+ * M4 步 4 的初值 accel = 0.3 太快（3 帧就冲到目标的 66%）—— 表现为"冰也不太难控制"；
+ * 现在 accel = 0.05（= 1 − friction）：
+ *  · 按住 3 帧 → 只到目标的 ~14%（"慢慢加速"✓）
+ *  · 换向 1 帧 → 旧分量仍保留 ~95%（"先滑一段"✓）
+ */
+TEST(TerrainEffects, IceDirectionalResponseIsDeliberatelySluggish) {
+    const tankcity::config::BlockDef *ice = shipped().block(QStringLiteral("ice"));
+    ASSERT_NE(ice, nullptr);
+    const double friction = ice->movement.frictionPerTick;
+    const double accel = ice->movement.accelScale;
+
+    // 两条参数必须**配对**：accel = 1 − friction 时，"输入加速"与"松手滑行"是同一个速率。
+    // 否则转向会比滑行灵敏得多 —— 反馈 #1 的手感问题正是这么来的。
+    EXPECT_NEAR(accel, 1.0 - friction, 0.02)
+        << "accelScale 与 frictionPerTick 不配对：转向会比滑行灵敏得多";
+
+    Map map;
+    const QRect iceRect = findBlock(map, QStringLiteral("ice"));
+    ASSERT_FALSE(iceRect.isNull());
+    const QPoint start = map.gridToWorld(map.worldToGrid(iceRect.center()));
+
+    const tankcity::config::TankStats stats = makePlayerStats();
+    Player player(&map, stats);
+    player.init(start.x(), start.y());
+
+    // 目标速度 = 移速 × 冰面倍率
+    const double target = stats.moveSpeed * map.getMoveSpeedFactor(start);
+    ASSERT_GT(target, 0.0);
+
+    // ① 按住一个方向 3 帧：只应达到目标的一小部分
+    player.setMoveVector(QPointF(1, 0));
+    for (int i = 0; i < 3; ++i)
+        player.update();
+
+    const double expectedAfterThree = target * (1.0 - std::pow(friction, 3));
+    EXPECT_NEAR(player.velocity().x(), expectedAfterThree, 0.15)
+        << "3 帧的加速量与 friction/accel 不吻合 —— 方向响应太灵敏或太迟钝（反馈 #1）";
+    EXPECT_LT(player.velocity().x(), target * 0.25)
+        << "按住 3 帧就到了目标速度的 1/4 以上：「冰面难控制」的手感会消失";
+
+    // ② 换向一帧：旧方向的分量只衰减一个 accel 的份额，且**方向还没反过来** ——
+    //    这正是反馈 #1 说的「先滑一段、还没开始向后加速」。
+    //    公式：v' = v·(1−accel) + (−target)·accel
+    const double beforeTurn = player.velocity().x();
+    player.setMoveVector(QPointF(-1, 0));
+    player.update();
+
+    EXPECT_NEAR(player.velocity().x(), beforeTurn * (1.0 - accel) - target * accel, 0.15)
+        << "换向一帧后的速度与 friction/accel 不吻合";
+    EXPECT_GT(player.velocity().x(), 0.0)
+        << "刚按下反方向就立刻倒车：应当「先滑行一段才反向加速」（反馈 #1）";
 }
 
 /** 对照组：**普通地形上松手立刻停** —— 惯性不许泄漏到别的地形上。 */

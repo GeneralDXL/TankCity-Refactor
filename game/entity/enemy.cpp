@@ -84,6 +84,24 @@ void Enemy::update(const QPoint &playerPos, Map *map)
     QPointF directionVec = playerPos - position;
     turretAngle = qRadiansToDegrees(qAtan2(directionVec.y(), directionVec.x()));
 
+    // ---- 但"看不见"时不许**锁定**（2026-10-03 试玩反馈 #2）----
+    //
+    // 到这一步为止，开火已经被视线判据挡掉了（canShoot），可是炮口仍**每帧无条件**指着玩家 ✗，
+    // 于是"躲进森林"看上去完全不像隐身 —— 敌人照样把炮管顶在你身上。
+    // 现在：看不见 → 炮口跟随**行进方向**（用上一帧的车体角，滞后一帧、肉眼无感），
+    // 读起来像在巡逻，而不是在锁你。
+    //
+    // ⚠️ **只做这一半**。另一半"看不见就不朝你寻路"（`补2-2`：连线可通才触发寻路）与
+    // 漫游状态 / 10 秒丢视野记忆 / 丢失处切线，**一律归 M4.5 的 AI 状态机** ——
+    // 在这里单独改会同时打破 M3 已验收的两条性质（"贴墙的玩家也能被贴近"、
+    // "跨越开阔地时车体角不摆动"），而那两条正是状态机要重新定义的东西。
+    const bool visible =
+        gameMap != nullptr
+        && gameMap->isLineOfSight(gameMap->worldToGrid(position),
+                                  gameMap->worldToGrid(playerPos));
+    if (!visible)
+        turretAngle = bodyAngle;
+
     // 更新路径重新计算计时器
     recalculatePathTimer--;
     if (recalculatePathTimer <= 0 || path.isEmpty() || stuckTimer > stuckThresholdTicks) {

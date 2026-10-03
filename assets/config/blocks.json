@@ -62,7 +62,7 @@
       "blocksBullet": false,
       "blocksSight": false,
       "moveSpeedFactor": 1.5,
-      "movement": { "model": "inertial", "frictionPerTick": 0.95, "accelScale": 0.3 }
+      "movement": { "model": "inertial", "frictionPerTick": 0.95, "accelScale": 0.05 }
     }
   }
 }
