@@ -94,8 +94,16 @@ void Player::updateMovement()
     // M3 步 4b 把它从 move() 移出来改成无条件推进 —— 每帧仍恰好减一次。
     updateCooldown();
 
-    if (moveVector.isNull())
+    if (moveVector.isNull()) {
+        // 惯性地形（冰）上"没有输入"也必须进 move()：摩擦衰减发生在那里（M4 步 4），
+        // 否则松手就急停、惯性形同虚设。
+        // 普通地形**不进** —— 保持"静止就完全不动"的既有手感（连亚像素余量也不释放）。
+        if (gameMap->getMovementAt(position).model
+            == tankcity::config::MovementModel::Inertial) {
+            move(bodyAngle, 0.0f, gameMap);
+        }
         return;
+    }
 
     // 八向归一化：数字键的斜向送来 (±1, ±1)，模长 √2 —— 不归一化的话斜着走会快 41%。
     // 归一化放在**服务端**（权威端）而不是客户端：「走多快」是规则，不是输入；

@@ -25,6 +25,9 @@ private:
     // （钢材要 armorPiercing，普通弹打上去不掉血）。取自 blocks.json 的 requiredBulletTags。
     QStringList requiredBulletTags;
     double moveSpeedFactor = 0.0;   // 地形移动倍率（0 表示不影响移动）
+    // 移动模型（M4 步 4，来自 blocks.json 的 `movement`）：普通 / 惯性。
+    // 惯性用于冰块：松手不停、有输入时转向迟钝（"难控但可控"）。
+    tankcity::config::MovementDef movement;
     // 物块 id（blocks.json 的键；边界墙为 "boundary"）。M3 步 5 引入：
     // 渲染与协议都在往「按 id 走」迁移，int type 与 world.cpp 里的桥接表将随之删除。
     // 声明在这里是为了与构造函数初始化列表的顺序一致（否则 -Wreorder）。
@@ -74,6 +77,9 @@ public:
         return false;
     }
     double getMoveSpeedFactor() const { return moveSpeedFactor; } // 地形倍率（配置）
+
+    /// 移动模型（M4 步 4）：普通 / 惯性及其参数（配置）。
+    const tankcity::config::MovementDef &getMovement() const { return movement; }
     int getHealth() const { return health; } // 获取生命值
     void setHealth(int h) { health = h; } // 设置生命值
     bool isMovable() const { return !blocksTank; }

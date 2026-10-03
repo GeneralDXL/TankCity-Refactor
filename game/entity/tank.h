@@ -58,7 +58,12 @@ public:
      */
     bool canStep(float angle, float distance, Map *map) const;
 
-    void setPosition(const QPoint& pos) { position = pos; moveRemainder_ = QPointF(); }
+    void setPosition(const QPoint& pos)
+    {
+        position = pos;
+        moveRemainder_ = QPointF();
+        velocity_ = QPointF();   // 瞬移不该把惯性带过去（M4 步 4）
+    }
     void setBodyAngle(float angle) { bodyAngle = angle; } // 车身角度设置
     float getBodyAngle() const { return bodyAngle; } // 车身角度获取
 
@@ -98,6 +103,15 @@ private:
      * 长距离的平均位移就不再受逐帧取整影响。
      */
     QPointF moveRemainder_;
+
+    /**
+     * 惯性模型下的**当前速度向量**（像素/帧，M4 步 4）。
+     *
+     * 只有踩在"惯性"地形（冰块）上才有意义：普通模型每帧直接把输入算成位移、不留状态
+     * （所以离开冰面时这里会被清零，不会带着冰上的速度上岸）。
+     * 地形参数本身**不在这里** —— 它们属于 `World`，每帧从脚下问一次（见 `getMovementAt`）。
+     */
+    QPointF velocity_;
 
     /// 以 center 为中心、按配置尺寸构造探测矩形。
     QRect probeRect(const QPoint &center) const;

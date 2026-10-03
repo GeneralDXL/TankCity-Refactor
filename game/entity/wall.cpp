@@ -18,7 +18,7 @@ Wall::Wall(int x, int y, int width, int height,
       width(width), height(height), health(def.maxHealth), destructible(def.destructible),
       blocksTank(def.blocksTank), blocksBullet(def.blocksBullet),
       blocksSight(def.blocksSight), requiredBulletTags(def.requiredBulletTags),
-      moveSpeedFactor(def.moveSpeedFactor),
+      moveSpeedFactor(def.moveSpeedFactor), movement(def.movement),
       // 边界墙用的是一个空的默认 BlockDef（它的行为是引擎约定，不由 blocks.json 描述），
       // 所以这里给它一个固定 id，客户端按 id 查贴图表时才有得查。
       block(def.id.isEmpty() ? QStringLiteral("boundary") : def.id)

@@ -118,6 +118,15 @@ public:
      */
     double getMoveSpeedFactor(const QPoint &position) const;
 
+    /**
+     * 该位置的**移动模型**（M4 步 4）：普通 / 惯性，以及惯性的摩擦与加速系数。
+     *
+     * 与 `getMoveSpeedFactor` 同一趟遍历、同一处归属 —— **地形参数属于世界，不属于坦克**：
+     * 坦克只持有"我现在的速度向量"这一份状态，参数每帧从脚下问一次。
+     * 否则坦克要持有一份随所在物块变化的地形副本，那是错误建模（也会在离开地形时忘记清掉）。
+     */
+    tankcity::config::MovementDef getMovementAt(const QPoint &position) const;
+
     /// 是否有物块挡住这个矩形（只判「挡移动」标记，见 kBlocksMove）。
     bool checkCollision(const QRect &rect) const;
 

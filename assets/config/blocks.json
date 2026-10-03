@@ -57,7 +57,7 @@
       "blocksBullet": false,
       "blocksSight": false,
       "moveSpeedFactor": 1.5,
-      "movement": { "model": "normal" }
+      "movement": { "model": "inertial", "frictionPerTick": 0.95, "accelScale": 0.3 }
     }
   }
 }

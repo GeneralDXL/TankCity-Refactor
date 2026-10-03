@@ -21,7 +21,9 @@
  */
 
 #include "config/ConfigLoader.h"
+#include "config/TankStats.h"
 #include "map.h"
+#include "player.h"
 
 #include <QPoint>
 #include <QRect>
@@ -64,6 +66,19 @@ QRect findBlock(Map &map, const QString &blockId)
 }
 
 /// @p rect 中心所在的那一格（**格坐标**）。
+/// 够用的坦克数值（速度取整数 5，位移断言可以写等号）。
+tankcity::config::TankStats makePlayerStats()
+{
+    tankcity::config::TankStats stats;
+    stats.health = 7;
+    stats.moveSpeed = 5.0;
+    stats.shootDelayTicks = 10;
+    stats.bulletSpeed = 10.0;
+    stats.bulletDamage = 1;
+    stats.muzzleOffset = 20;
+    return stats;
+}
+
 QPoint cellOf(const Map &map, const QRect &rect)
 {
     return map.worldToGrid(rect.center());
@@ -159,10 +174,75 @@ TEST(TerrainEffects, ForestSlowsToSevenTenths) {
         << "地形倍率没有从配置走到运行时";
 }
 
-/** 冰的倍率仍是 1.5（M4 只改冰的**模型**，不改倍率 —— 惯性属步 4）。 */
+/** 冰的倍率仍是 1.5（M4 只改冰的**模型**，不改倍率）。 */
 TEST(TerrainEffects, IceKeepsItsSpeedFactorUntilTheInertialStep) {
     Map map;
     const QRect ice = findBlock(map, QStringLiteral("ice"));
     ASSERT_FALSE(ice.isNull());
     EXPECT_NEAR(map.getMoveSpeedFactor(ice.center()), 1.5, 1e-9);
+}
+
+/** 冰面的移动模型是**惯性**（配置驱动），且参数已接线。 */
+TEST(TerrainEffects, IceUsesTheInertialMovementModel) {
+    const tankcity::config::BlockDef *ice = shipped().block(QStringLiteral("ice"));
+    ASSERT_NE(ice, nullptr);
+    EXPECT_EQ(ice->movement.model, tankcity::config::MovementModel::Inertial);
+    EXPECT_GT(ice->movement.frictionPerTick, 0.0);
+    EXPECT_LT(ice->movement.frictionPerTick, 1.0) << "摩擦必须小于 1，否则松手就等于急停";
+    EXPECT_GT(ice->movement.accelScale, 0.0);
+    EXPECT_LT(ice->movement.accelScale, 1.0) << "加速必须弱于 1，否则惯性地形没有'难控'可言";
+
+    Map map;
+    const QRect rect = findBlock(map, QStringLiteral("ice"));
+    ASSERT_FALSE(rect.isNull());
+    EXPECT_EQ(map.getMovementAt(rect.center()).model,
+              tankcity::config::MovementModel::Inertial)
+        << "地形模型没有从配置走到运行时";
+}
+
+/**
+ * 冰面：**松手后继续滑行**（惯性的全部意义）。
+ *
+ * 先在冰格中心朝右推两帧，再**清空输入**走三帧 —— 普通地形上位置应当纹丝不动，
+ * 冰上则必须继续向右。位移刻意取得小（合计约 20px < 25px），保证玩家始终留在同一格里，
+ * 不会滑出冰面把用例变成"看运气"。
+ */
+TEST(TerrainEffects, IceKeepsSlidingAfterTheInputStops) {
+    Map map;
+    const QRect ice = findBlock(map, QStringLiteral("ice"));
+    ASSERT_FALSE(ice.isNull()) << "没有找到含冰块的关卡";
+
+    const QPoint start = map.gridToWorld(map.worldToGrid(ice.center()));
+    Player player(&map, makePlayerStats());
+    player.init(start.x(), start.y());
+
+    player.setMoveVector(QPointF(1, 0));
+    for (int i = 0; i < 2; ++i)
+        player.update();
+    const QPoint afterPush = player.getPosition();
+
+    player.setMoveVector(QPointF(0, 0));
+    for (int i = 0; i < 3; ++i)
+        player.update();
+
+    EXPECT_GT(player.getPosition().x(), afterPush.x() + 2)
+        << "冰上松手应当继续滑行；若这里没动，说明摩擦/惯性没有接线";
+}
+
+/** 对照组：**普通地形上松手立刻停** —— 惯性不许泄漏到别的地形上。 */
+TEST(TerrainEffects, NormalTerrainStillStopsImmediately) {
+    Map map;   // 空地图：没有任何地形 → 普通模型
+    Player player(&map, makePlayerStats());
+    player.init(600, 450);
+
+    player.setMoveVector(QPointF(1, 0));
+    player.update();
+    const QPoint afterPush = player.getPosition();
+
+    player.setMoveVector(QPointF(0, 0));
+    for (int i = 0; i < 10; ++i)
+        player.update();
+
+    EXPECT_EQ(player.getPosition(), afterPush)
+        << "普通地形上松手必须立即停住（惯性状态不得泄漏到非冰地形）";
 }

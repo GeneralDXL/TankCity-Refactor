@@ -242,3 +242,13 @@ double World::getMoveSpeedFactor(const QPoint &position) const
     }
     return 1.0;
 }
+
+tankcity::config::MovementDef World::getMovementAt(const QPoint &position) const
+{
+    // 与 getMoveSpeedFactor 同序（首个包含该点的墙体），取不到就当普通模型。
+    for (const Wall &wall : walls) {
+        if (wall.contains(position))
+            return wall.getMovement();
+    }
+    return tankcity::config::MovementDef{};   // 默认即 Normal，字段默认值见 ConfigTypes.h
+}

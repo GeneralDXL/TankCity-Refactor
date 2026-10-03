@@ -70,6 +70,12 @@ public:
         return world_.getMoveSpeedFactor(position);
     }
 
+    /// 该位置的移动模型（普通 / 惯性）—— 见 `World::getMovementAt`（M4 步 4）。
+    tankcity::config::MovementDef getMovementAt(const QPoint &position) const
+    {
+        return world_.getMovementAt(position);
+    }
+
     bool checkCollision(const QRect &rect) const { return world_.checkCollision(rect); }
 
     /// 出生点用：离 preferred 最近的可通行格中心（见 `World::nearestWalkableCenter`）。

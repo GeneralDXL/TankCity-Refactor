@@ -219,7 +219,10 @@ TEST(ConfigLoad, BlocksMatchLegacyEquivalentValues)
     ASSERT_NE(ice, nullptr);
     EXPECT_EQ(ice->layer, QStringLiteral("ground"));
     EXPECT_DOUBLE_EQ(ice->moveSpeedFactor, 1.5);
-    EXPECT_EQ(ice->movement.model, MovementModel::Normal);  // M3 改为 Inertial
+    // **M4 步 4 生效**：冰改为惯性模型（M2 的等价值是 normal，M3 那行注释预告了这一步）
+    EXPECT_EQ(ice->movement.model, MovementModel::Inertial);
+    EXPECT_LT(ice->movement.frictionPerTick, 1.0);   // 松手会滑行
+    EXPECT_LT(ice->movement.accelScale, 1.0);        // 转向迟钝
 }
 
 TEST(ConfigLoad, EntitiesUseTuningRelativeValues)

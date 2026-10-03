@@ -37,9 +37,33 @@ void Tank::move(float angle, float distance, Map *map)
     // 无影响时为 1.0。与旧代码「只认 FOREST/ICE 两个类型」等价 —— 取倍率而不是
     // 判断类型，新增地形不必再改这里。
     const float scale = static_cast<float>(map->getMoveSpeedFactor(position));
-    const double rad = qDegreesToRadians(static_cast<double>(angle));
-    const double stepX = std::cos(rad) * distance * scale;
-    const double stepY = std::sin(rad) * distance * scale;
+
+    // 地形还能改**移动模型**（M4 步 4）：冰面是惯性 —— 松手继续滑、有输入时转向迟钝。
+    //
+    // ⚠️ 普通模型的算式**逐字未动**（下面 Normal 分支就是原文），所以非冰地形上的手感
+    // 与改动前**逐位一致** —— 这一点由既有的 10 条 player_movement_test 守着，
+    // 而不是靠"我觉得没改"。
+    const tankcity::config::MovementDef model = map->getMovementAt(position);
+    double stepX = 0.0;
+    double stepY = 0.0;
+    if (model.model == tankcity::config::MovementModel::Normal) {
+        velocity_ = QPointF();   // 离开惯性地形就清掉惯性状态，免得带着冰上的速度"上岸"
+        const double rad = qDegreesToRadians(static_cast<double>(angle));
+        stepX = std::cos(rad) * distance * scale;
+        stepY = std::sin(rad) * distance * scale;
+    } else {
+        // 惯性：期望速度由输入给出，实际速度朝它**按比例靠拢**（accelScale 越小越迟钝、
+        // 越"难控但可控"）；没有输入（distance 为 0）则按摩擦逐帧衰减 —— 于是松手会滑行。
+        const double rad = qDegreesToRadians(static_cast<double>(angle));
+        const QPointF desired(std::cos(rad) * distance * scale,
+                              std::sin(rad) * distance * scale);
+        if (distance > 0.0)
+            velocity_ += (desired - velocity_) * model.accelScale;
+        else
+            velocity_ *= model.frictionPerTick;
+        stepX = velocity_.x();
+        stepY = velocity_.y();
+    }
 
     // 亚像素余量：位移常常不足 1px（森林 ×0.5 上的敌人斜向只有 2.5*0.707 ≈ 1.77px，
     // 更慢或倍率更小时直接为 0），逐帧向零截断会把整帧丢掉 —— 实测表现就是
