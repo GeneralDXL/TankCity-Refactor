@@ -246,8 +246,10 @@ TEST(PlayerMovement, ProbeRectFormulaIsSharedAndCentred) {
     const QRect box = Tank::probeRectFor(QPoint(100, 100), 24, 36);
 
     EXPECT_EQ(box, QRect(88, 82, 24, 36)) << "公式应当以中心点定位、宽高各自独立";
-    EXPECT_EQ(box.center().x(), 100);
-    EXPECT_EQ(box.center().y(), 100);
+
+    // ⚠️ 这里**不**断言 `box.center() == (100,100)`：Qt 对**偶数**宽高的 `QRect::center()`
+    // 取 `left + (w-1)/2`，24×36 的盒子得到 (99,99) —— 那是 Qt 的既有约定，不是本公式的问题。
+    // 我第一版就是这么写错的 ✗：夹具的假设比被测代码更容易错（本项目的老教训 ✓）。
 
     // 本实体用的是同一个公式（配置 24×36 → 盒子就是 24×36）
     Map map;

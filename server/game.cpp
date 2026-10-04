@@ -702,6 +702,18 @@ void Game::checkCollisions()
 
 void Game::spawnEnemy()
 {
+    // 敌人数值先取出来：出生**探测盒的尺寸**来自这里。
+    // 以前这里写死 `QRect(x-15, y-15, 30, 30)` ✗，而配置里敌人是 40×40 ✗ ——
+    // 20 次重试全按小一圈的盒子判定，"检测通过"并不等于"整台车放得下"，
+    // 敌人可能一出生就与墙重叠 5px（靠贴墙滑动挤出来，过程会抽搐）。
+    // 现在用 `Tank::probeRectFor` —— 与移动判定**同一个公式**（M4 登记项 D8）。
+    tankcity::config::TankStats stats;
+    tankcity::config::AiDef ai;
+    if (!resolveCurrentEnemyStats(stats, ai)) {
+        qCritical() << "敌人数值不可用，放弃生成敌人";
+        return;
+    }
+
     int borderMargin = 50;
     int x = 0, y = 0;
     bool validPosition = false;
@@ -729,7 +741,9 @@ void Game::spawnEnemy()
             break;
         }
         
-        QRect spawnRect(x - 15, y - 15, 30, 30);
+        // 探测盒 = 这台敌人**实际占的盒子**（配置里的 collisionBox）—— 与移动判定同一公式 ✓
+        const QRect spawnRect = Tank::probeRectFor(QPoint(x, y), stats.collisionBoxW,
+                                                   stats.collisionBoxH);
         if (!gameMap->checkCollision(spawnRect)) {
             validPosition = true;
             break;
@@ -737,17 +751,15 @@ void Game::spawnEnemy()
     }
     
     if (!validPosition) {
-        x = 400;
-        y = 300;
+        // 20 次都撞上：不再写死 (400,300) ✗ —— 那一格可能是海或墙，
+        // 与 M3 修的玩家出生点**完全同一类 bug**。交给引擎取"离期望点最近、
+        // 且放得下整台车"的格子中心（同一个判据 ✓）。
+        const QPoint fallback = gameMap->nearestWalkableCenter(QPoint(400, 300));
+        x = fallback.x();
+        y = fallback.y();
     }
     
-    tankcity::config::TankStats stats;
-    tankcity::config::AiDef ai;
-    if (!resolveCurrentEnemyStats(stats, ai)) {
-        qCritical() << "敌人数值不可用，放弃生成敌人";
-        return;
-    }
-
+    // （数值在上面已经取过了：出生探测盒要用它的尺寸 ✓）
     auto enemy = std::make_shared<Enemy>(gameMap, QPoint(x, y), currentDifficulty, stats, ai);
     enemies.append(enemy);
     

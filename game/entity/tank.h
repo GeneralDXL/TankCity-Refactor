@@ -136,8 +136,8 @@ private:
      */
     QPointF velocity_;
 
-    /// 以 center 为中心、按配置尺寸构造探测矩形。
-    QRect probeRect(const QPoint &center) const;
+    // 注意：`probeRect` 的定义在 public 区（内联，委托给唯一的公式 `probeRectFor`）。
+    // 这里**不再重复声明** —— 同名同签名的两份声明会直接编译不过（2026-10-04 踩过 ✗）。
 
     /**
      * 该探测矩形所在位置能否通行。
