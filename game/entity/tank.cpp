@@ -118,11 +118,8 @@ void Tank::move(float angle, float distance, Map *map)
     position = reached;
 }
 
-QRect Tank::probeRect(const QPoint &center) const
-{
-    return QRect(center.x() - collisionBoxW / 2, center.y() - collisionBoxH / 2,
-                 collisionBoxW, collisionBoxH);
-}
+// probeRect 现在是内联的（见 tank.h）：它只是把本实体的配置尺寸交给 `probeRectFor`，
+// 而那个静态公式是全项目唯一的"整车盒子"定义 —— 服务端出生校验用的是同一个 ✓。
 
 QRect Tank::getRect() const
 {

@@ -43,6 +43,25 @@ public:
     int getCollisionBoxHeight() const { return collisionBoxH; }
 
     /**
+     * 以 @p center 为中心、按给定尺寸构造"整车盒子"—— **全项目唯一的那个公式**。
+     *
+     * 移动判定（`probeRect`）与服务端的**敌人出生校验**（`Game::spawnEnemy`）都用它。
+     * 之所以抽出来：两者曾经各写一份，服务端那份写死 30×30 ✗、而配置是 40×40 ✗ ——
+     * 20 次重试全按小盒判定，敌人可能一出生就与墙重叠 5px（靠贴墙滑动挤出来，但过程会抽搐）。
+     * 尺寸不统一是**同一类 bug 的复发源**，所以让"探针尺寸"只有一个来源。
+     */
+    static QRect probeRectFor(const QPoint &center, int width, int height)
+    {
+        return QRect(center.x() - width / 2, center.y() - height / 2, width, height);
+    }
+
+    /// 本实体的移动探测盒（尺寸来自配置）。见 `probeRectFor`。
+    QRect probeRect(const QPoint &center) const
+    {
+        return probeRectFor(center, collisionBoxW, collisionBoxH);
+    }
+
+    /**
      * 车体矩形（以当前位置为中心、按配置尺寸）。
      *
      * **受击判定与移动探针共用这一个尺寸**（M3 决议 D4）。在此之前是三套值：
