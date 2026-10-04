@@ -35,14 +35,18 @@ bool Enemy::canShoot() const
     if (shootCooldown != 0 || shootTimer != 0)
         return false;
 
-    // 视线被墙挡住就不开火。否则敌人隔着墙照样射击，看起来就是"对着墙打"——
-    // 实测反馈里的现象之一。判据复用网格走线（一次 Bresenham），代价可忽略。
+    // 视线被挡就不开火。否则敌人隔着墙照样射击，看起来就是"对着墙打"——实测反馈里的现象之一。
+    //
+    // 判据是**视线**（`isLineOfSight`，走 blocksSight）而**不是**"坦克能否通过"：
+    // M4 步 3 之后森林挡视线 ⇒「玩家待在林子里 ⇒ 敌人看不见 ⇒ 不开火」**自然成立**，
+    // 不需要为森林写任何特例 ✓。海则相反（`blocksSight: false`，不挡视线）⇒
+    // 敌人会**隔着海朝你开火** —— 这正是"隔海看得见、但我得绕过去"的设计意图 ✓。
     if (lastKnownPlayerPos.isNull())
         return false;   // 还没 update() 过，不知道玩家在哪
 
     return gameMap != nullptr
-           && gameMap->isLineWalkable(gameMap->worldToGrid(position),
-                                      gameMap->worldToGrid(lastKnownPlayerPos));
+           && gameMap->isLineOfSight(gameMap->worldToGrid(position),
+                                     gameMap->worldToGrid(lastKnownPlayerPos));
 }
 
 
@@ -79,6 +83,24 @@ void Enemy::update(const QPoint &playerPos, Map *map)
     // 更新炮塔角度指向玩家
     QPointF directionVec = playerPos - position;
     turretAngle = qRadiansToDegrees(qAtan2(directionVec.y(), directionVec.x()));
+
+    // ---- 但"看不见"时不许**锁定**（2026-10-03 试玩反馈 #2）----
+    //
+    // 到这一步为止，开火已经被视线判据挡掉了（canShoot），可是炮口仍**每帧无条件**指着玩家 ✗，
+    // 于是"躲进森林"看上去完全不像隐身 —— 敌人照样把炮管顶在你身上。
+    // 现在：看不见 → 炮口跟随**行进方向**（用上一帧的车体角，滞后一帧、肉眼无感），
+    // 读起来像在巡逻，而不是在锁你。
+    //
+    // ⚠️ **只做这一半**。另一半"看不见就不朝你寻路"（`补2-2`：连线可通才触发寻路）与
+    // 漫游状态 / 10 秒丢视野记忆 / 丢失处切线，**一律归 M4.5 的 AI 状态机** ——
+    // 在这里单独改会同时打破 M3 已验收的两条性质（"贴墙的玩家也能被贴近"、
+    // "跨越开阔地时车体角不摆动"），而那两条正是状态机要重新定义的东西。
+    const bool visible =
+        gameMap != nullptr
+        && gameMap->isLineOfSight(gameMap->worldToGrid(position),
+                                  gameMap->worldToGrid(playerPos));
+    if (!visible)
+        turretAngle = bodyAngle;
 
     // 更新路径重新计算计时器
     recalculatePathTimer--;
@@ -243,9 +265,9 @@ Bullet* Enemy::shoot()
 
         // 创建新子弹（使用地图指针而非this；速度与伤害来自 entities.json）
         return new Bullet(bulletPos, static_cast<int>(turretAngle), BulletType::Enemy,
-                          bulletSpeed, bulletDamage,
-                          [mapPtr](const QRect& rect, int damage) {  // 修改：捕获地图指针
-                              return mapPtr->checkBulletCollision(rect, damage);
+                          bulletSpeed, bulletProfile_,
+                          [mapPtr](const QRect& rect, const tankcity::config::BulletProfile &profile) {
+                              return mapPtr->checkBulletCollision(rect, profile);
                           });
     }
 

@@ -1,5 +1,7 @@
 #include "map.h"
 
+#include "reflect.h"   // faceOf：撞在哪一面（M4 步 2）
+
 #include <QJsonObject>
 
 // M3：几何部分（格点换算、走线、碰撞查询、物块表）已迁入 World（world.h / world.cpp）。
@@ -16,33 +18,59 @@ bool Map::loadLevel(const tankcity::config::LevelData &level,
     return world_.loadLevel(level, config);
 }
 
-bool Map::checkBulletCollision(const QRect &rect, int damage)
+BulletHit Map::checkBulletCollision(const QRect &rect,
+                                    const tankcity::config::BulletProfile &profile)
 {
+    BulletHit result;
+
     // 几何：先问世界「第一个挡子弹的物块是谁」（顺序由 CollisionWorld 的插入顺序保证，
     // 与旧实现「首个命中即返回」一致）。
     const int hitWallId = world_.firstShotBlockerId(rect);
     if (hitWallId < 0)
-        return false;
+        return result;
 
     Wall *wall = world_.mutableWallById(hitWallId);
     if (wall == nullptr)
-        return false;
+        return result;
 
-    // 规则：只有可破坏物块吃伤害（边界与钢墙在 blocks.json 里 destructible=false）
-    if (wall->isDestructible()) {
-        wall->setHealth(wall->getHealth() - damage);
+    result.hit = true;
+    result.wallRect = wall->getRect();
+    // 撞在哪一面由几何决定：最小穿透轴；正对角落（两轴穿透相等）固定取 x 轴。
+    // 确定性是刻意的 —— 无状态的"每帧重猜"正是 M3 贴角抽搐的成因（见 reflect.h）。
+    result.face = tankcity::world::faceOf(rect, result.wallRect);
+
+    // 可弹物块：这里只报告"它可弹"，弹不弹（还有没有次数）由**子弹**决定。
+    // 规则来自手稿：弹射仅限钢材与边界；击中砖块等直接走"破坏"这条路。
+    // 弹射与穿甲互斥（加载器已校验），所以可弹的子弹本来就打不动钢材，两条规则不会打架。
+    if (profile.bounceOn.contains(wall->getBlockId())) {
+        result.bouncable = true;
+        return result;   // 可弹物块不吃伤害
     }
 
-    if (wall->isDestructible() && wall->getHealth() <= 0) {
+    // 规则：可破坏 **且** 这发子弹打得动它，才吃伤害（M4 步 1）。
+    // 钢材的 requiredBulletTags 是 ["armorPiercing"]，普通弹打上去只是"打在钢板上"：
+    // 不扣血，但子弹照样命中消失 —— 这正是手感上"打不动"的表达。
+    if (wall->isDestructible() && wall->acceptsBullet(profile.tags)) {
+        wall->setHealth(wall->getHealth() - profile.damage);
+    }
+
+    if (wall->isDestructible() && wall->acceptsBullet(profile.tags) && wall->getHealth() <= 0) {
         // 先取 id 再移除：removeWallById 之后 wall 指针已失效
         const int deadWallId = wall->getId();
 
         QJsonObject json;
         json["type"] = "delete_wall";
         json["wallId"] = deadWallId;
+        // M4 步 5：把"这是什么物块、倒在哪里"一并发出去 —— 服务端据此决定掉什么、掉在哪儿。
+        // 客户端仍按 wallId 删墙，多出来的字段它不看（**只增字段**，属安全扩展）。
+        // 注意要在 removeWallById 之前读：那之后 wall 指针就失效了。
+        json["block"] = wall->getBlockId();
+        const QRect deadRect = wall->getRect();
+        json["x"] = deadRect.center().x();
+        json["y"] = deadRect.center().y();
         emit broadcastMessage(json);
 
         world_.removeWallById(deadWallId);
     }
-    return true;
+    return result;   // 命中即返回（是否消失由子弹决定）
 }

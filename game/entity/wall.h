@@ -17,7 +17,17 @@ private:
     bool destructible = false;      // 能否被打掉
     bool blocksTank = true;         // 是否挡坦克
     bool blocksBullet = true;       // 是否挡子弹
+    // 是否挡视线（M4 步 3，来自 blocks.json 的 blocksSight）。
+    // 森林为 true ⇒ 敌怪的视线穿不过森林 ⇒「待在林子里就不被看见」自然成立，无需特例；
+    // 海为 false ⇒ 隔海看得见、但绕不过去（手稿里的设计意图）。
+    bool blocksSight = false;
+    // 打掉它所需的子弹标签（M4 步 1）。空 = 任何子弹都能打（砖块）；非空 = 必须带其中一个标签
+    // （钢材要 armorPiercing，普通弹打上去不掉血）。取自 blocks.json 的 requiredBulletTags。
+    QStringList requiredBulletTags;
     double moveSpeedFactor = 0.0;   // 地形移动倍率（0 表示不影响移动）
+    // 移动模型（M4 步 4，来自 blocks.json 的 `movement`）：普通 / 惯性。
+    // 惯性用于冰块：松手不停、有输入时转向迟钝（"难控但可控"）。
+    tankcity::config::MovementDef movement;
     // 物块 id（blocks.json 的键；边界墙为 "boundary"）。M3 步 5 引入：
     // 渲染与协议都在往「按 id 走」迁移，int type 与 world.cpp 里的桥接表将随之删除。
     // 声明在这里是为了与构造函数初始化列表的顺序一致（否则 -Wreorder）。
@@ -46,7 +56,30 @@ public:
     bool isDestructible() const { return destructible; } // 是否可破坏（配置）
     bool isBlockingTank() const { return blocksTank; }   // 是否挡坦克（配置）
     bool isBlockingBullet() const { return blocksBullet; } // 是否挡子弹（配置）
+    bool isBlockingSight() const { return blocksSight; }   // 是否挡视线（配置）
+
+    /**
+     * 这发子弹打不打得到它（M4 步 1）。
+     *
+     * 判据是两个集合**有无交集**：物块要求 `requiredBulletTags` 中至少一个标签，
+     * 子弹提供 `bulletTags`。物块不要求任何标签时，任何子弹都打得动。
+     *
+     * 于是「钢材要穿甲弹、砖块不挑弹种」纯粹是配置差别 —— 没有 `if (steel)` 这种特判。
+     */
+    bool acceptsBullet(const QStringList &bulletTags) const
+    {
+        if (requiredBulletTags.isEmpty())
+            return true;
+        for (const QString &tag : requiredBulletTags) {
+            if (bulletTags.contains(tag))
+                return true;
+        }
+        return false;
+    }
     double getMoveSpeedFactor() const { return moveSpeedFactor; } // 地形倍率（配置）
+
+    /// 移动模型（M4 步 4）：普通 / 惯性及其参数（配置）。
+    const tankcity::config::MovementDef &getMovement() const { return movement; }
     int getHealth() const { return health; } // 获取生命值
     void setHealth(int h) { health = h; } // 设置生命值
     bool isMovable() const { return !blocksTank; }

@@ -31,9 +31,35 @@ public:
     void setSpeed(float newSpeed) { speed = newSpeed; } // 速度设置
     int getBulletDamage() const { return bulletDamage; } // 子弹伤害（配置）
 
+    /// 默认弹种的完整属性（M4 步 2）。开火方用它构造子弹。
+    const tankcity::config::BulletProfile &bulletProfile() const { return bulletProfile_; }
+
+    /// 当前速度向量（像素/帧，M4 步 4）。普通地形上恒为 0（不保留惯性状态）。
+    /// 暴露给测试观察"方向响应有多迟钝"——那是惯性手感的**唯一**可测判据。
+    QPointF velocity() const { return velocity_; }
+
     /// 移动探测盒尺寸（像素）：来自 entities.json 的 collisionBox，不再是写死的 40。
     int getCollisionBoxWidth() const { return collisionBoxW; }
     int getCollisionBoxHeight() const { return collisionBoxH; }
+
+    /**
+     * 以 @p center 为中心、按给定尺寸构造"整车盒子"—— **全项目唯一的那个公式**。
+     *
+     * 移动判定（`probeRect`）与服务端的**敌人出生校验**（`Game::spawnEnemy`）都用它。
+     * 之所以抽出来：两者曾经各写一份，服务端那份写死 30×30 ✗、而配置是 40×40 ✗ ——
+     * 20 次重试全按小盒判定，敌人可能一出生就与墙重叠 5px（靠贴墙滑动挤出来，但过程会抽搐）。
+     * 尺寸不统一是**同一类 bug 的复发源**，所以让"探针尺寸"只有一个来源。
+     */
+    static QRect probeRectFor(const QPoint &center, int width, int height)
+    {
+        return QRect(center.x() - width / 2, center.y() - height / 2, width, height);
+    }
+
+    /// 本实体的移动探测盒（尺寸来自配置）。见 `probeRectFor`。
+    QRect probeRect(const QPoint &center) const
+    {
+        return probeRectFor(center, collisionBoxW, collisionBoxH);
+    }
 
     /**
      * 车体矩形（以当前位置为中心、按配置尺寸）。
@@ -55,7 +81,12 @@ public:
      */
     bool canStep(float angle, float distance, Map *map) const;
 
-    void setPosition(const QPoint& pos) { position = pos; moveRemainder_ = QPointF(); }
+    void setPosition(const QPoint& pos)
+    {
+        position = pos;
+        moveRemainder_ = QPointF();
+        velocity_ = QPointF();   // 瞬移不该把惯性带过去（M4 步 4）
+    }
     void setBodyAngle(float angle) { bodyAngle = angle; } // 车身角度设置
     float getBodyAngle() const { return bodyAngle; } // 车身角度获取
 
@@ -71,6 +102,9 @@ protected:
     float speed = 0.0f;
     double bulletSpeed = 0.0;  // 子弹速度（像素/帧）
     int bulletDamage = 1;      // 子弹伤害
+    // 默认弹种的完整属性（M4 步 2）：伤害 / 标签 / 可弹清单 / 最大弹数。
+    // 开火时整份交给子弹 —— 命中判定因此只需要一个参数，M4.5 的弹药队列也只需换一份。
+    tankcity::config::BulletProfile bulletProfile_;
     int muzzleOffset = 0;      // 炮口相对车体中心的距离（像素）
     // 一律给默认值：漏进初始化列表就是未初始化的栈垃圾 ——
     // M3 步 3b 重写本文件时漏掉 `shootDelay(stats.shootDelayTicks)`，
@@ -93,8 +127,17 @@ private:
      */
     QPointF moveRemainder_;
 
-    /// 以 center 为中心、按配置尺寸构造探测矩形。
-    QRect probeRect(const QPoint &center) const;
+    /**
+     * 惯性模型下的**当前速度向量**（像素/帧，M4 步 4）。
+     *
+     * 只有踩在"惯性"地形（冰块）上才有意义：普通模型每帧直接把输入算成位移、不留状态
+     * （所以离开冰面时这里会被清零，不会带着冰上的速度上岸）。
+     * 地形参数本身**不在这里** —— 它们属于 `World`，每帧从脚下问一次（见 `getMovementAt`）。
+     */
+    QPointF velocity_;
+
+    // 注意：`probeRect` 的定义在 public 区（内联，委托给唯一的公式 `probeRectFor`）。
+    // 这里**不再重复声明** —— 同名同签名的两份声明会直接编译不过（2026-10-04 踩过 ✗）。
 
     /**
      * 该探测矩形所在位置能否通行。

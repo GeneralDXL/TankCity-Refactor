@@ -190,8 +190,12 @@ TEST(ConfigLoad, BlocksMatchLegacyEquivalentValues)
 
     const auto *steel = cfg.block(QStringLiteral("steel"));
     ASSERT_NE(steel, nullptr);
-    // M2 等价值：旧代码里钢材耐久 200000，实际不可破坏
-    EXPECT_FALSE(steel->destructible);
+    // **M4 步 1 生效**：钢材改为「可破坏，但需穿甲弹」—— M2 α 表里写明的第二批目标值
+    //（M2 的等价值曾是 destructible=false；旧代码用 200000 耐久假装不可破）。
+    // 数值律：8 血 ÷ 穿甲 2 伤 = **4 下**，与砖块（4 ÷ 1）同级同速。
+    EXPECT_TRUE(steel->destructible);
+    EXPECT_EQ(steel->maxHealth, 8);
+    EXPECT_EQ(steel->requiredBulletTags, QStringList{QStringLiteral("armorPiercing")});
 
     const auto *sea = cfg.block(QStringLiteral("sea"));
     ASSERT_NE(sea, nullptr);
@@ -204,15 +208,21 @@ TEST(ConfigLoad, BlocksMatchLegacyEquivalentValues)
     ASSERT_NE(forest, nullptr);
     EXPECT_EQ(forest->layer, QStringLiteral("overlay"));
     // M2 等价值：玩家侧旧值为 ×0.5。敌人侧旧代码另有 ×0.75（enemy.cpp），
-    // 属同一地形两套数值的不一致，M2 起统一按此字段取值（有意修正）；M3 改为 0.7。
-    EXPECT_DOUBLE_EQ(forest->moveSpeedFactor, 0.5);
-    EXPECT_FALSE(forest->hidesTankFromEnemyAI);       // M3 启用
+    // 属同一地形两套数值的不一致，M2 起统一按此字段取值（有意修正）。
+    // **M4 步 3 生效**：目标值 0.7（M2 α 表的第二批）。
+    EXPECT_DOUBLE_EQ(forest->moveSpeedFactor, 0.7);
+    // 森林"隐身"的**唯一机制**是挡住视线 —— 不是那个已被退役的
+    // `hidesTankFromEnemyAI` 开关（它语义被 blocksSight 完全覆盖，见台账 §4C-C9）。
+    EXPECT_TRUE(forest->blocksSight);
 
     const auto *ice = cfg.block(QStringLiteral("ice"));
     ASSERT_NE(ice, nullptr);
     EXPECT_EQ(ice->layer, QStringLiteral("ground"));
     EXPECT_DOUBLE_EQ(ice->moveSpeedFactor, 1.5);
-    EXPECT_EQ(ice->movement.model, MovementModel::Normal);  // M3 改为 Inertial
+    // **M4 步 4 生效**：冰改为惯性模型（M2 的等价值是 normal，M3 那行注释预告了这一步）
+    EXPECT_EQ(ice->movement.model, MovementModel::Inertial);
+    EXPECT_LT(ice->movement.frictionPerTick, 1.0);   // 松手会滑行
+    EXPECT_LT(ice->movement.accelScale, 1.0);        // 转向迟钝
 }
 
 TEST(ConfigLoad, EntitiesUseTuningRelativeValues)
@@ -337,8 +347,10 @@ TEST(ConfigErrors, DestructibleWithoutHealthIsRejected)
 TEST(ConfigErrors, TagNoBulletProvidesIsRejected)
 {
     TempConfig tmp;
+    // 用一个**没有任何子弹提供**的标签。不能用 armorPiercing 了 —— M4 步 1 加了
+    // bulletAP（tags:["armorPiercing"]）之后，那个标签已经有人提供，本条校验不再触发。
     tmp.patch(QStringLiteral("blocks.json"), QStringLiteral("\"requiredBulletTags\": [],"),
-              QStringLiteral("\"requiredBulletTags\": [\"armorPiercing\"],"));
+              QStringLiteral("\"requiredBulletTags\": [\"tagNobodyProvides\"],"));
     expectConfigError([&tmp] { tmp.load(); }, QStringLiteral("requiredBulletTags"),
                       QStringLiteral("没有任何子弹提供"));
 }
@@ -422,17 +434,21 @@ TEST(ConfigErrors, DifficultyOverrideTypoIsRejected)
 
 TEST(ConfigInheritance, BlockFallsBackToLayerDefaults)
 {
-    // forest 属于 overlay 图层（blocksSight 默认 true）；去掉它的显式声明后应继承为 true。
+    // 用 **sea** 而不是 forest：M4 步 3 之后 forest 的显式值（可行走、不挡弹、挡视线）
+    // 与 overlay 层的默认值**完全相同**，拿它举例会退化成"无论继承与否都通过"的空断言。
+    // sea 属于 `blocks` 图层（三个开关默认都是 true），而它**显式关掉了挡子弹** ——
+    // 把那行删掉后，blocksBullet 应当回到图层的 true，这才真正测到"继承"。
     TempConfig tmp;
     tmp.patch(QStringLiteral("blocks.json"),
-              QStringLiteral("\"blocksSight\": false,\n      \"moveSpeedFactor\": 0.5,"),
-              QStringLiteral("\"moveSpeedFactor\": 0.5,"));
+              QStringLiteral("\"blocksBullet\": false,\n      \"blocksSight\": false"),
+              QStringLiteral("\"blocksSight\": false"));
 
     const Config cfg = tmp.load();
-    const auto *forest = cfg.block(QStringLiteral("forest"));
-    ASSERT_NE(forest, nullptr);
-    EXPECT_TRUE(forest->blocksSight);      // 继承自 overlay
-    EXPECT_FALSE(forest->blocksTank);      // 同样继承自 overlay
+    const auto *sea = cfg.block(QStringLiteral("sea"));
+    ASSERT_NE(sea, nullptr);
+    EXPECT_TRUE(sea->blocksBullet);    // 删掉显式声明后继承自 blocks 图层
+    EXPECT_TRUE(sea->blocksTank);      // 自己的显式声明
+    EXPECT_FALSE(sea->blocksSight);    // 自己的显式声明（M4 步 3：海不挡视线）
 }
 
 // ---------------------------------------------------------------------------
@@ -524,9 +540,9 @@ TEST(ConfigResolve, BlockBehaviourMatchesLegacyCollisionRules)
 
     const auto *steel = cfg.block(QStringLiteral("steel"));
     ASSERT_NE(steel, nullptr);
-    // 旧：health = 200000（实为不可破）。这个数现在连 JSON 里都不需要存在，
-    // 不可破坏这件事由 destructible 表达。
-    EXPECT_FALSE(steel->destructible);
+    // M4 步 1 起钢材可破坏（需穿甲弹）；旧代码的 200000 耐久已由 maxHealth 表达。
+    EXPECT_TRUE(steel->destructible);
+    EXPECT_EQ(steel->maxHealth, 8);
     EXPECT_TRUE(steel->blocksTank);
     EXPECT_TRUE(steel->blocksBullet);
 
@@ -535,13 +551,18 @@ TEST(ConfigResolve, BlockBehaviourMatchesLegacyCollisionRules)
     // 旧：checkBulletCollision 跳过 SEA（子弹穿过），但挡坦克
     EXPECT_TRUE(sea->blocksTank);
     EXPECT_FALSE(sea->blocksBullet);
+    // **M4 步 3 起 blocksSight 被真正接线**：海不挡视线 —— 隔海看得见、但要绕行
+    EXPECT_FALSE(sea->blocksSight);
 
     const auto *forest = cfg.block(QStringLiteral("forest"));
     ASSERT_NE(forest, nullptr);
     // 旧：坦克可穿过，降速 ×0.5（敌人侧 0.75 的不一致已在 M2 统一）
     EXPECT_FALSE(forest->blocksTank);
     EXPECT_FALSE(forest->blocksBullet);
-    EXPECT_DOUBLE_EQ(forest->moveSpeedFactor, 0.5);
+    // **M4 步 3 生效**：森林**挡视线**（这就是"待在林子里隐身"的全部机制，零特例），
+    // 且降速目标是 0.7（M2 α 表写明的第二批；0.5 是 M2 的等价值）。
+    EXPECT_TRUE(forest->blocksSight);
+    EXPECT_DOUBLE_EQ(forest->moveSpeedFactor, 0.7);
 
     const auto *ice = cfg.block(QStringLiteral("ice"));
     ASSERT_NE(ice, nullptr);

@@ -9,6 +9,7 @@
 #include <QDateTime>
 #include <QTimer>   // 道具时效与结算延时用的是 QTimer::singleShot（走真实时间，与帧无关）
 #include "asset/AssetPaths.h"
+#include "config/DropTable.h"   // pickDrop：按权重抽掉落项（M4 步 5）
 #include "server.h"
 
 namespace {
@@ -589,8 +590,13 @@ void Game::checkCollisions()
             continue;
         }
         
-        // 检查墙壁碰撞（伤害取自子弹原型，与子弹自身 move() 里的判定同源）
-        if (gameMap->checkBulletCollision(bullet->getRect(), bullet->getInjury())) {
+        // 检查墙壁碰撞：与 Bullet::move() 是**同一判据**，因此必须给同一份参数 ——
+        // 同一发子弹在两处不能得到两种答案（M4 的反弹一旦加入，"可弹"在两处结论不同
+        // 就会表现为"有时弹、有时原地消失"）。参数只有 profile 一个，防的就是这件事。
+        // 注：move() 命中后已把子弹标记为待清除，所以这里通常不会再命中；
+        // 它兜住的是"出生点就在物块里"这类边角情况。
+        const BulletHit hit = gameMap->checkBulletCollision(bullet->getRect(), bullet->profile());
+        if (hit.hit && !(hit.bouncable && bullet->bouncesLeft() > 0)) {
             it = bullets.erase(it);
             continue;
         }
@@ -696,6 +702,18 @@ void Game::checkCollisions()
 
 void Game::spawnEnemy()
 {
+    // 敌人数值先取出来：出生**探测盒的尺寸**来自这里。
+    // 以前这里写死 `QRect(x-15, y-15, 30, 30)` ✗，而配置里敌人是 40×40 ✗ ——
+    // 20 次重试全按小一圈的盒子判定，"检测通过"并不等于"整台车放得下"，
+    // 敌人可能一出生就与墙重叠 5px（靠贴墙滑动挤出来，过程会抽搐）。
+    // 现在用 `Tank::probeRectFor` —— 与移动判定**同一个公式**（M4 登记项 D8）。
+    tankcity::config::TankStats stats;
+    tankcity::config::AiDef ai;
+    if (!resolveCurrentEnemyStats(stats, ai)) {
+        qCritical() << "敌人数值不可用，放弃生成敌人";
+        return;
+    }
+
     int borderMargin = 50;
     int x = 0, y = 0;
     bool validPosition = false;
@@ -723,7 +741,9 @@ void Game::spawnEnemy()
             break;
         }
         
-        QRect spawnRect(x - 15, y - 15, 30, 30);
+        // 探测盒 = 这台敌人**实际占的盒子**（配置里的 collisionBox）—— 与移动判定同一公式 ✓
+        const QRect spawnRect = Tank::probeRectFor(QPoint(x, y), stats.collisionBoxW,
+                                                   stats.collisionBoxH);
         if (!gameMap->checkCollision(spawnRect)) {
             validPosition = true;
             break;
@@ -731,17 +751,15 @@ void Game::spawnEnemy()
     }
     
     if (!validPosition) {
-        x = 400;
-        y = 300;
+        // 20 次都撞上：不再写死 (400,300) ✗ —— 那一格可能是海或墙，
+        // 与 M3 修的玩家出生点**完全同一类 bug**。交给引擎取"离期望点最近、
+        // 且放得下整台车"的格子中心（同一个判据 ✓）。
+        const QPoint fallback = gameMap->nearestWalkableCenter(QPoint(400, 300));
+        x = fallback.x();
+        y = fallback.y();
     }
     
-    tankcity::config::TankStats stats;
-    tankcity::config::AiDef ai;
-    if (!resolveCurrentEnemyStats(stats, ai)) {
-        qCritical() << "敌人数值不可用，放弃生成敌人";
-        return;
-    }
-
+    // （数值在上面已经取过了：出生探测盒要用它的尺寸 ✓）
     auto enemy = std::make_shared<Enemy>(gameMap, QPoint(x, y), currentDifficulty, stats, ai);
     enemies.append(enemy);
     
@@ -944,6 +962,50 @@ void Game::safeStop() {
 }
 void Game::onWallDelete(const QJsonObject &json)
 {
+    // 先原样转发给客户端（它按 wallId 删墙；M4 起报文里多了 block/x/y，它不看）
+    emit broadcastData(QJsonDocument(json).toJson(), id);
+
+    // M4 步 5「① 地形即资源」：物块被打掉时按掉落表掉一件道具。
+    // 抽签规则是纯函数（shared/config/DropTable.h，可单测），这里只管"随机数 + 掉在哪"。
+    dropItemForBlock(json.value(QStringLiteral("block")).toString(),
+                     json.value(QStringLiteral("x")).toInt(),
+                     json.value(QStringLiteral("y")).toInt());
+}
+
+void Game::dropItemForBlock(const QString &blockId, int x, int y)
+{
+    const tankcity::config::BlockDef *def = m_config.block(blockId);
+    if (def == nullptr || def->drops.isEmpty())
+        return;   // 这个物块不掉东西（钢材/边界/森林/海…）
+
+    const tankcity::config::DropDef *drop =
+        tankcity::config::pickDrop(def->drops, QRandomGenerator::global()->generateDouble());
+    if (drop == nullptr)
+        return;
+
+    // ⚠️ 这是一张**临时桥**：把 items.json 的 id 映射到运行期的 ItemType。
+    // M4.5 把道具改成「效果数组」之后，Item 会直接携带 id 与效果，这张表随之删除。
+    // 它的存在由 tests/block_drop_test.cpp 守着 —— 表里漏了哪个 id，用例立刻红。
+    static const QHash<QString, ItemType> kByItemId{
+        {QStringLiteral("healthPack"), ItemType::HealthPack},
+        {QStringLiteral("ammoBoost"), ItemType::AmmoBoost},
+        {QStringLiteral("speedBoost"), ItemType::SpeedBoost},
+    };
+    const auto typeIt = kByItemId.constFind(drop->item);
+    if (typeIt == kByItemId.constEnd()) {
+        qWarning() << "掉落表引用了运行期不认识的道具 id：" << drop->item;
+        return;
+    }
+
+    Item item{nextItemId++, typeIt.value(), x, y, 10000};
+    items.append(item);
+
+    QJsonObject json;
+    json["type"] = "item_spawned";
+    json["id"] = item.id;
+    json["x"] = x;
+    json["y"] = y;
+    json["item_type"] = static_cast<int>(item.type);
     emit broadcastData(QJsonDocument(json).toJson(), id);
 }
 

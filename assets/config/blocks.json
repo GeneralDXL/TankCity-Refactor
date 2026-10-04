@@ -6,6 +6,11 @@
       "destructible": true,
       "maxHealth": 4,
       "requiredBulletTags": [],
+      "drops": [
+        { "item": "healthPack", "weight": 3 },
+        { "item": "ammoBoost", "weight": 2 },
+        { "item": "speedBoost", "weight": 2 }
+      ],
       "blocksTank": true,
       "blocksBullet": true,
       "blocksSight": true,
@@ -19,7 +24,9 @@
 
     "steel": {
       "layer": "blocks",
-      "destructible": false,
+      "destructible": true,
+      "maxHealth": 8,
+      "requiredBulletTags": ["armorPiercing"],
       "blocksTank": true,
       "blocksBullet": true,
       "blocksSight": true,
@@ -44,9 +51,8 @@
       "destructible": false,
       "blocksTank": false,
       "blocksBullet": false,
-      "blocksSight": false,
-      "moveSpeedFactor": 0.5,
-      "hidesTankFromEnemyAI": false
+      "blocksSight": true,
+      "moveSpeedFactor": 0.7
     },
 
     "ice": {
@@ -56,7 +62,7 @@
       "blocksBullet": false,
       "blocksSight": false,
       "moveSpeedFactor": 1.5,
-      "movement": { "model": "normal" }
+      "movement": { "model": "inertial", "frictionPerTick": 0.95, "accelScale": 0.05 }
     }
   }
 }

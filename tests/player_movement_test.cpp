@@ -235,6 +235,32 @@ TEST(PlayerMovement, CollisionBoxComesFromStats) {
 }
 
 /**
+ * "整车盒子"的公式只有一处（`Tank::probeRectFor`）—— 移动判定与服务端出生校验共用它。
+ *
+ * 背景（M4 登记项 D8）：`Game::spawnEnemy` 曾**自己写一份** `QRect(x-15,y-15,30,30)` ✗，
+ * 而配置里敌人是 40×40 ✗ —— 出生校验按小一圈的盒子判定，"检测通过"不等于"整台车放得下"。
+ * 这类"探针尺寸不统一"已经复发过一次，所以把公式收成静态函数后钉住它的语义：
+ * 以给定点为中心、宽高**各自**取自参数（不是同一个值）。
+ */
+TEST(PlayerMovement, ProbeRectFormulaIsSharedAndCentred) {
+    const QRect box = Tank::probeRectFor(QPoint(100, 100), 24, 36);
+
+    EXPECT_EQ(box, QRect(88, 82, 24, 36)) << "公式应当以中心点定位、宽高各自独立";
+
+    // ⚠️ 这里**不**断言 `box.center() == (100,100)`：Qt 对**偶数**宽高的 `QRect::center()`
+    // 取 `left + (w-1)/2`，24×36 的盒子得到 (99,99) —— 那是 Qt 的既有约定，不是本公式的问题。
+    // 我第一版就是这么写错的 ✗：夹具的假设比被测代码更容易错（本项目的老教训 ✓）。
+
+    // 本实体用的是同一个公式（配置 24×36 → 盒子就是 24×36）
+    Map map;
+    tankcity::config::TankStats stats = makeStats();
+    stats.collisionBoxW = 24;
+    stats.collisionBoxH = 36;
+    Player player(&map, stats);
+    EXPECT_EQ(player.probeRect(QPoint(100, 100)), Tank::probeRectFor(QPoint(100, 100), 24, 36));
+}
+
+/**
  * 打完一发之后，冷却走完必须能再打 —— 钉住"只能打一次"这类回归。
  *
  * 背景：M3 步 4b 把 `shootCooldown--` 从 `Tank::move()` 里移出来，改由

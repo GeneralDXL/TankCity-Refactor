@@ -86,7 +86,28 @@ public:
      * 玩家一开局就卡在里面动弹不得。
      */
     QPoint nearestWalkableCenter(const QPoint &preferred) const;
+    /**
+     * 两点之间"坦克能否通过"。
+     *
+     * ⚠️ @p start / @p end 是**格坐标**（不是世界坐标）—— 调用方先 `worldToGrid()`。
+     * 名字（以及"线"这个字）容易让人以为收的是世界坐标，M4 步 3 我为此踩过一次：
+     * 传世界坐标进去，Bresenham 会把它当成"第 575 格"，答案永远是"通得过"。
+     */
     bool isLineWalkable(const QPoint &start, const QPoint &end) const;
+
+    /**
+     * 两点之间**能不能看见**（M4 步 3）—— 敌怪开火与索敌的判据。
+     *
+     * 与 `isLineWalkable` 是**两件事**，故意做成两个函数：
+     *  - `isLineWalkable` 判「坦克能否沿这条线通过」（走 `kBlocksMove`），
+     *    它**还被 `PathFinder::simplifyPath` 用来拉直 A\* 路径** —— **不能改它**；
+     *  - 本函数判「视线能否穿过」（走 `kBlocksSight`）：森林**挡**视线（于是
+     *    "待在林子里就不被敌怪看到"自然成立，**不需要任何特例**），
+     *    海**不**挡（可隔海看见、但要绕行 —— 手稿里的设计意图）。
+     *
+     * 把两者合并成一个函数是这一步最容易踩的坑：会顺手改坏 A\* 的路径平滑。
+     */
+    bool isLineOfSight(const QPoint &start, const QPoint &end) const;
     QPoint gridToWorld(const QPoint &gridPos) const;
 
     /**
@@ -96,6 +117,15 @@ public:
      * 移动）。取「首个包含该点的墙体」，与旧实现同序。
      */
     double getMoveSpeedFactor(const QPoint &position) const;
+
+    /**
+     * 该位置的**移动模型**（M4 步 4）：普通 / 惯性，以及惯性的摩擦与加速系数。
+     *
+     * 与 `getMoveSpeedFactor` 同一趟遍历、同一处归属 —— **地形参数属于世界，不属于坦克**：
+     * 坦克只持有"我现在的速度向量"这一份状态，参数每帧从脚下问一次。
+     * 否则坦克要持有一份随所在物块变化的地形副本，那是错误建模（也会在离开地形时忘记清掉）。
+     */
+    tankcity::config::MovementDef getMovementAt(const QPoint &position) const;
 
     /// 是否有物块挡住这个矩形（只判「挡移动」标记，见 kBlocksMove）。
     bool checkCollision(const QRect &rect) const;
@@ -131,6 +161,7 @@ private:
     enum CollisionFlags {
         kBlocksMove = 1u << 0,   ///< 是否挡移动（blocks.json 的 blocksTank）
         kBlocksShot = 1u << 1,   ///< 是否挡投射物（blocks.json 的 blocksBullet）
+        kBlocksSight = 1u << 2,  ///< 是否挡视线（blocks.json 的 blocksSight，M4 步 3）
     };
 
     /**
@@ -145,6 +176,9 @@ private:
 
     /// 由物块配置转成碰撞标记。
     static engine::physics::CollisionWorld::Flags flagsOf(const Wall &wall);
+
+    /// 「这一格挡不挡视线」（判 `kBlocksSight`）。与 `isCellWalkable` 同构、判据不同。
+    bool isCellVisible(int gridX, int gridY) const;
 
     /**
      * 重建碰撞世界。

@@ -18,7 +18,8 @@ constexpr int kMaxSubSteps = 64;
 
 Tank::Tank(Map *gameMap, const tankcity::config::TankStats &stats)
     : health(stats.health), speed(stats.moveSpeed), bulletSpeed(stats.bulletSpeed),
-      bulletDamage(stats.bulletDamage), muzzleOffset(stats.muzzleOffset),
+      bulletDamage(stats.bulletDamage), bulletProfile_(stats.bulletProfile()),
+      muzzleOffset(stats.muzzleOffset),
       shootDelay(stats.shootDelayTicks),
       collisionBoxW(stats.collisionBoxW), collisionBoxH(stats.collisionBoxH),
       gameMap(gameMap)
@@ -36,9 +37,41 @@ void Tank::move(float angle, float distance, Map *map)
     // 无影响时为 1.0。与旧代码「只认 FOREST/ICE 两个类型」等价 —— 取倍率而不是
     // 判断类型，新增地形不必再改这里。
     const float scale = static_cast<float>(map->getMoveSpeedFactor(position));
-    const double rad = qDegreesToRadians(static_cast<double>(angle));
-    const double stepX = std::cos(rad) * distance * scale;
-    const double stepY = std::sin(rad) * distance * scale;
+
+    // 地形还能改**移动模型**（M4 步 4）：冰面是惯性 —— 松手继续滑、有输入时转向迟钝。
+    //
+    // ⚠️ 普通模型的算式**逐字未动**（下面 Normal 分支就是原文），所以非冰地形上的手感
+    // 与改动前**逐位一致** —— 这一点由既有的 10 条 player_movement_test 守着，
+    // 而不是靠"我觉得没改"。
+    const tankcity::config::MovementDef model = map->getMovementAt(position);
+    double stepX = 0.0;
+    double stepY = 0.0;
+    if (model.model == tankcity::config::MovementModel::Normal) {
+        const double rad = qDegreesToRadians(static_cast<double>(angle));
+        stepX = std::cos(rad) * distance * scale;
+        stepY = std::sin(rad) * distance * scale;
+
+        // 陆地上**不留惯性**（松手就停、转向立刻生效），但把这一帧的速度记进 `velocity_` ——
+        // 它就是"踏上冰面那一刻的初速度"（2026-10-04 走查要求：*"我原有的速度是继承下来的，
+        // 而非突然降低到 0"*）。此前这里是 `velocity_ = QPointF()` ✗：步上冰面的第一帧从**零**
+        // 开始，只剩 `accelScale` 那一份（约原速的 8%），观感是"进门先撞墙"，而不是"滑进冰面"。
+        //
+        // 没有输入时 `distance` 为 0 ⇒ 这里记的也是 0 ⇒ **站着进冰面不会凭空多出速度** ✓。
+        // 离开冰面回到陆地：本分支每帧都覆写它 ⇒ 冰上的惯性**不会**被带上岸 ✓。
+        velocity_ = QPointF(stepX, stepY);
+    } else {
+        // 惯性：期望速度由输入给出，实际速度朝它**按比例靠拢**（accelScale 越小越迟钝、
+        // 越"难控但可控"）；没有输入（distance 为 0）则按摩擦逐帧衰减 —— 于是松手会滑行。
+        const double rad = qDegreesToRadians(static_cast<double>(angle));
+        const QPointF desired(std::cos(rad) * distance * scale,
+                              std::sin(rad) * distance * scale);
+        if (distance > 0.0)
+            velocity_ += (desired - velocity_) * model.accelScale;
+        else
+            velocity_ *= model.frictionPerTick;
+        stepX = velocity_.x();
+        stepY = velocity_.y();
+    }
 
     // 亚像素余量：位移常常不足 1px（森林 ×0.5 上的敌人斜向只有 2.5*0.707 ≈ 1.77px，
     // 更慢或倍率更小时直接为 0），逐帧向零截断会把整帧丢掉 —— 实测表现就是
@@ -93,11 +126,8 @@ void Tank::move(float angle, float distance, Map *map)
     position = reached;
 }
 
-QRect Tank::probeRect(const QPoint &center) const
-{
-    return QRect(center.x() - collisionBoxW / 2, center.y() - collisionBoxH / 2,
-                 collisionBoxW, collisionBoxH);
-}
+// probeRect 现在是内联的（见 tank.h）：它只是把本实体的配置尺寸交给 `probeRectFor`，
+// 而那个静态公式是全项目唯一的"整车盒子"定义 —— 服务端出生校验用的是同一个 ✓。
 
 QRect Tank::getRect() const
 {

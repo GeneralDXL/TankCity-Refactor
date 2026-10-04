@@ -82,6 +82,8 @@ engine::physics::CollisionWorld::Flags World::flagsOf(const Wall &wall)
         flags |= kBlocksMove;
     if (wall.isBlockingBullet())
         flags |= kBlocksShot;
+    if (wall.isBlockingSight())
+        flags |= kBlocksSight;
     return flags;
 }
 
@@ -200,6 +202,41 @@ bool World::isLineWalkable(const QPoint &start, const QPoint &end) const
     });
 }
 
+bool World::isCellVisible(int gridX, int gridY) const
+{
+    // 与 isCellWalkable 同构，只是换一个标记：视线只看 blocksSight。
+    // 刻意**不做血量判据** —— 一堵正在被打的墙也仍然挡着视线。
+    bool visible = true;
+    const QRect cellRect = grid_.cellRect(QPoint(gridX, gridY), kCellPadding);
+
+    world_.forEachOverlap(engine::physics::Aabb::fromRect(cellRect), kBlocksSight,
+                          [&visible](const engine::physics::CollisionWorld::Body &) {
+        visible = false;
+        return false;
+    });
+    return visible;
+}
+
+bool World::isLineOfSight(const QPoint &start, const QPoint &end) const
+{
+    // 与 isLineWalkable 用同一条 Bresenham 走线，**只换判据**。
+    // 两者刻意分开：isLineWalkable 还被 PathFinder 用于拉直路径，
+    // 把它改成"子弹可通行"会让 A* 的路径平滑跟着变（M4 步 0 结论 5）。
+
+    // ⚠️ 先堵住 `walkLine` 的一个退化情形：**起终点同格时它一次都不回调、直接返回 true**
+    //（这是引擎的既有契约，见 `Grid::walkLine` 的注释）。
+    // 战场上那就是"敌人贴到了你身上（同一格）"——于是「站在森林里 = 隐身」在最贴身的一格上
+    // 失效 ✗：敌人看得见你、照常开火，而子弹就生在你自己身上 ⇒ **掉血却看不到子弹**
+    //（2026-10-04 走查实测 ✗）。同格时改问"这一格本身挡不挡视线"：
+    // 森林格 ⇒ 看不见 ✓；海格 ⇒ 看得见 ✓（与隔海能互射的既有口径一致）。
+    if (start == end)
+        return isCellVisible(start.x(), start.y());
+
+    return grid_.walkLine(start, end, [this](const QPoint &cell) {
+        return isCellVisible(cell.x(), cell.y());
+    });
+}
+
 QPoint World::gridToWorld(const QPoint &gridPos) const
 {
     return grid_.toWorld(gridPos);
@@ -214,4 +251,14 @@ double World::getMoveSpeedFactor(const QPoint &position) const
         }
     }
     return 1.0;
+}
+
+tankcity::config::MovementDef World::getMovementAt(const QPoint &position) const
+{
+    // 与 getMoveSpeedFactor 同序（首个包含该点的墙体），取不到就当普通模型。
+    for (const Wall &wall : walls) {
+        if (wall.contains(position))
+            return wall.getMovement();
+    }
+    return tankcity::config::MovementDef{};   // 默认即 Normal，字段默认值见 ConfigTypes.h
 }
