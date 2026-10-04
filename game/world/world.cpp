@@ -222,6 +222,16 @@ bool World::isLineOfSight(const QPoint &start, const QPoint &end) const
     // 与 isLineWalkable 用同一条 Bresenham 走线，**只换判据**。
     // 两者刻意分开：isLineWalkable 还被 PathFinder 用于拉直路径，
     // 把它改成"子弹可通行"会让 A* 的路径平滑跟着变（M4 步 0 结论 5）。
+
+    // ⚠️ 先堵住 `walkLine` 的一个退化情形：**起终点同格时它一次都不回调、直接返回 true**
+    //（这是引擎的既有契约，见 `Grid::walkLine` 的注释）。
+    // 战场上那就是"敌人贴到了你身上（同一格）"——于是「站在森林里 = 隐身」在最贴身的一格上
+    // 失效 ✗：敌人看得见你、照常开火，而子弹就生在你自己身上 ⇒ **掉血却看不到子弹**
+    //（2026-10-04 走查实测 ✗）。同格时改问"这一格本身挡不挡视线"：
+    // 森林格 ⇒ 看不见 ✓；海格 ⇒ 看得见 ✓（与隔海能互射的既有口径一致）。
+    if (start == end)
+        return isCellVisible(start.x(), start.y());
+
     return grid_.walkLine(start, end, [this](const QPoint &cell) {
         return isCellVisible(cell.x(), cell.y());
     });

@@ -246,6 +246,41 @@ TEST(TerrainEffects, IceKeepsSlidingAfterTheInputStops) {
  *  · 按住 3 帧 → 只到目标的 ~14%（"慢慢加速"✓）
  *  · 换向 1 帧 → 旧分量仍保留 ~95%（"先滑一段"✓）
  */
+/**
+ * 森林隐身必须**连贴身那一格**也守住 —— 2026-10-04 走查实测出的缺陷。
+ *
+ * 观察原话：*"进入林子后，炮口不指向我，但是仍然会朝我这里运动，且在林子内部他们会和我
+ * 贴脸然后攻击，然后我会扣血，这个过程看不到子弹。"*
+ *
+ * 根因不在森林判据，而在引擎的一个**退化情形**：`Grid::walkLine` 在**起终点同格**时
+ * 一次都不回调、直接返回 `true`（既有契约）。敌人贴到玩家身上 ⇒ 两者同格 ⇒ 视线判定
+ * "看得见" ✗ ⇒ 开火，而子弹生在玩家身上（`muzzleOffset` 只有 25px，贴身时仍在身上）⇒
+ * **掉血看不到子弹** ✓。修法是同格时改问"这一格本身挡不挡视线"。
+ *
+ * 第三条断言是**反面**：别把这条修成"同格永远看不见" —— 海不挡视线，隔海互射是既有口径 ✓。
+ */
+TEST(TerrainEffects, ForestHidesTheTankEvenAtPointBlankRange) {
+    Map map;
+
+    const QRect forestRect = findBlock(map, QStringLiteral("forest"));
+    ASSERT_FALSE(forestRect.isNull());
+    const QPoint forestCell = map.worldToGrid(forestRect.center());
+
+    // ① 同一格（贴身）：仍应"看不见"
+    EXPECT_FALSE(map.isLineOfSight(forestCell, forestCell))
+        << "起终点同格时视线退化成 true —— 贴身的敌人因此能开火（走查实测的掉血来源）";
+
+    // ② 相邻格、目标在森林里：看不见
+    EXPECT_FALSE(map.isLineOfSight(forestCell + QPoint(1, 0), forestCell));
+
+    // ③ 海：同格仍然"看得见"（不挡视线，隔海能互射）
+    const QRect seaRect = findBlock(map, QStringLiteral("sea"));
+    ASSERT_FALSE(seaRect.isNull());
+    const QPoint seaCell = map.worldToGrid(seaRect.center());
+    EXPECT_TRUE(map.isLineOfSight(seaCell, seaCell))
+        << "把同格一律判成看不见会把海也遮掉 —— 海只挡车、不挡视线";
+}
+
 TEST(TerrainEffects, IceDirectionalResponseIsDeliberatelySluggish) {
     const tankcity::config::BlockDef *ice = shipped().block(QStringLiteral("ice"));
     ASSERT_NE(ice, nullptr);
