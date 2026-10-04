@@ -259,6 +259,59 @@ TEST(TerrainEffects, IceKeepsSlidingAfterTheInputStops) {
  *
  * 第三条断言是**反面**：别把这条修成"同格永远看不见" —— 海不挡视线，隔海互射是既有口径 ✓。
  */
+/**
+ * 踏上冰面时**继承陆地上的速度** —— 2026-10-04 走查要求。
+ *
+ * 报告原话：*"当我从其他界面进入冰面时，我原有的速度是继承下来的，而非突然降低到 0。"*
+ * 期望语义：冰面是"**难控制**"，不是"**进门先撞墙**" —— 步上冰面的那一刻应当带着陆地速度
+ * 继续滑，再由摩擦与加速度把它慢慢拉到冰面的目标速度（×1.5）。
+ *
+ * 机制上只有一条通道：`Tank::move()` 在**普通模型**分支把这一帧的速度记进 `velocity_`
+ *（`distance` 为 0 时记 0 ⇒ 站着进冰面不会凭空有速度），冰面分支从它出发。
+ * 修前那里写的是 `velocity_ = QPointF()`（清零）⇒ 第一帧只剩 `accelScale` 那一份（原速的 8%）。
+ *
+ * 这条用例钉住"陆地速度已被记录"这个**前提**：它一旦红，说明陆地又清成了 0 ——
+ * 那么"进冰继承"就会再次失效。第二条断言同时挡住"记的是累计位移"这类写错。
+ */
+TEST(TerrainEffects, LandSpeedIsCarriedOntoTheIce) {
+    Map map;
+    const World &world = map.world();
+
+    // 自己找一格"可通行 + 普通模型"的陆地（用被测系统自己的查询定位夹具，
+    // 而不是按关卡版式去猜 —— 这是本项目反复吃过亏的地方）。
+    QPoint landCell(-1, -1);
+    for (int gy = 0; gy < world.getGridHeight() && landCell.x() < 0; ++gy) {
+        for (int gx = 0; gx < world.getGridWidth(); ++gx) {
+            if (!world.isCellWalkable(gx, gy))
+                continue;
+            if (world.getMovementAt(world.gridToWorld(QPoint(gx, gy))).model
+                != tankcity::config::MovementModel::Normal)
+                continue;
+            landCell = QPoint(gx, gy);
+            break;
+        }
+    }
+    ASSERT_GE(landCell.x(), 0) << "夹具地图里找不到一格普通地形的陆地";
+
+    Player player(&map, makePlayerStats());
+    const QPoint start = map.gridToWorld(landCell);
+    player.init(start.x(), start.y());
+
+    player.setMoveVector(QPointF(1, 0));   // 全速向右
+    for (int i = 0; i < 5; ++i)
+        player.update();
+
+    // 取**最后一帧**的位移，与记录下来的速度对比（不是累计位移）
+    const QPoint before = player.getPosition();
+    player.update();
+    const double lastFrameSpeed = player.getPosition().x() - before.x();
+    ASSERT_GT(lastFrameSpeed, 0.0) << "前提没成立：坦克根本没动起来";
+
+    EXPECT_NEAR(player.velocity().x(), lastFrameSpeed, 0.01)
+        << "陆地上没有记录速度 ⇒ 踏上冰面时只能从 0 起步（走查报告的现象）";
+    EXPECT_NEAR(player.velocity().y(), 0.0, 0.01);
+}
+
 TEST(TerrainEffects, ForestHidesTheTankEvenAtPointBlankRange) {
     Map map;
 

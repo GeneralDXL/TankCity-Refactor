@@ -47,10 +47,18 @@ void Tank::move(float angle, float distance, Map *map)
     double stepX = 0.0;
     double stepY = 0.0;
     if (model.model == tankcity::config::MovementModel::Normal) {
-        velocity_ = QPointF();   // 离开惯性地形就清掉惯性状态，免得带着冰上的速度"上岸"
         const double rad = qDegreesToRadians(static_cast<double>(angle));
         stepX = std::cos(rad) * distance * scale;
         stepY = std::sin(rad) * distance * scale;
+
+        // 陆地上**不留惯性**（松手就停、转向立刻生效），但把这一帧的速度记进 `velocity_` ——
+        // 它就是"踏上冰面那一刻的初速度"（2026-10-04 走查要求：*"我原有的速度是继承下来的，
+        // 而非突然降低到 0"*）。此前这里是 `velocity_ = QPointF()` ✗：步上冰面的第一帧从**零**
+        // 开始，只剩 `accelScale` 那一份（约原速的 8%），观感是"进门先撞墙"，而不是"滑进冰面"。
+        //
+        // 没有输入时 `distance` 为 0 ⇒ 这里记的也是 0 ⇒ **站着进冰面不会凭空多出速度** ✓。
+        // 离开冰面回到陆地：本分支每帧都覆写它 ⇒ 冰上的惯性**不会**被带上岸 ✓。
+        velocity_ = QPointF(stepX, stepY);
     } else {
         // 惯性：期望速度由输入给出，实际速度朝它**按比例靠拢**（accelScale 越小越迟钝、
         // 越"难控但可控"）；没有输入（distance 为 0）则按摩擦逐帧衰减 —— 于是松手会滑行。
